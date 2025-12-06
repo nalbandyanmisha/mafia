@@ -1,7 +1,25 @@
 use clap::{Parser, Subcommand};
 use rand::prelude::*;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::Write;
+use tokio::sync::mpsc;
+use tokio::time::{Duration, sleep};
+
+async fn stopwatch(mut tx: mpsc::Sender<String>) {
+    let mut seconds = 0;
+    loop {
+        sleep(Duration::from_secs(1)).await;
+        seconds += 1;
+        let _ = tx.send(format!("Elapsed: {}s", seconds)).await;
+    }
+}
+
+async fn command_listener(mut rx: mpsc::Receiver<String>) {
+    while let Some(msg) = rx.recv().await {
+        println!("{}", msg);
+    }
+}
 
 #[derive(Debug, Default, Clone)]
 struct Player {
@@ -93,9 +111,9 @@ struct Table {
 }
 
 impl Table {
+    pub const SEATS: u8 = 10;
     fn new() -> Self {
-        const COUNT: u8 = 10;
-        let chairs: Vec<Chair> = (1..=COUNT).map(|pos| Chair::new(pos)).collect();
+        let chairs: Vec<Chair> = (1..=Self::SEATS).map(|pos| Chair::new(pos)).collect();
         let available_roles = vec![
             Role::Don,
             Role::Mafia,
@@ -108,7 +126,7 @@ impl Table {
             Role::Citizen,
             Role::Citizen,
         ];
-        let available_positions: Vec<u8> = (1..=COUNT).collect();
+        let available_positions: Vec<u8> = (1..=Self::SEATS).collect();
         Table {
             chairs,
             available_roles,
@@ -144,13 +162,25 @@ impl Table {
     }
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Debug, Default, PartialEq, Eq)]
 enum Phase {
     #[default]
     Night,
     Morning,
     Day,
     Voting,
+}
+
+impl Display for Phase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Phase::Night => "Night",
+            Phase::Morning => "Morning",
+            Phase::Day => "Day",
+            Phase::Voting => "Voting",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -175,14 +205,32 @@ enum Action {
     Show,
     Print,
     Quite,
+    Stopwatch { duration: Option<u64> },
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{self, BufRead, Write};
+    use tokio::sync::mpsc;
+    use tokio::sync::oneshot;
+    use tokio::time::{Duration, sleep};
+
+    let (tx, mut rx) = mpsc::channel::<String>(32);
+    use std::sync::{Arc, Mutex};
+    let stopwatch_msg = Arc::new(Mutex::new(String::new()));
+    let stopwatch_msg_clone = stopwatch_msg.clone();
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            let mut smsg = stopwatch_msg_clone.lock().unwrap();
+            *smsg = msg;
+        }
+    });
+
     let mut table = Table::new();
 
     loop {
-        print!("> ");
+        let smsg = stopwatch_msg.lock().unwrap().clone();
+        print!("{}-{} [{}]> ", table.phase, table.round, smsg);
         std::io::stdout().flush()?;
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
@@ -193,9 +241,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mafia = MafiaCli::parse_from(clap_args);
 
         match &mafia.command {
+            Some(Action::Stopwatch { duration }) => {
+                let secs = duration.unwrap_or(60);
+                let tx_clone = tx.clone();
+                tokio::spawn(async move {
+                    let mut seconds = 0;
+                    let warning_time = secs.saturating_sub(10);
+                    loop {
+                        sleep(Duration::from_secs(1)).await;
+                        seconds += 1;
+                        if seconds == warning_time {
+                            let _ = tx_clone.send("10 seconds remaining!".to_string()).await;
+                        }
+                        if seconds == secs {
+                            let _ = tx_clone.send("Time's up!".to_string()).await;
+                            break;
+                        }
+                        let _ = tx_clone.send(format!("Elapsed: {seconds}s")).await;
+                    }
+                });
+                println!("Stopwatch started for {secs} seconds!");
+            }
             Some(Action::Join { name }) => {
                 if table.available_positions.is_empty() {
                     println!("The table is full. Cannot join.");
+                    continue;
+                }
+                if table.phase != Phase::Night && table.round != 0 {
+                    println!(
+                        "Players can only join during the Night phase before the game starts."
+                    );
                     continue;
                 }
                 let mut chair = table.pick_chair();
@@ -270,6 +345,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Some(Action::Shoot { position }) => {
+                if table.phase != Phase::Night {
+                    println!("Shooting can only be done during the Night phase.");
+                    continue;
+                }
                 let pos = *position;
                 if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
                     if let Some(player) = &mut chair.player {
