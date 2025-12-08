@@ -6,21 +6,6 @@ use std::io::Write;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 
-async fn stopwatch(mut tx: mpsc::Sender<String>) {
-    let mut seconds = 0;
-    loop {
-        sleep(Duration::from_secs(1)).await;
-        seconds += 1;
-        let _ = tx.send(format!("Elapsed: {}s", seconds)).await;
-    }
-}
-
-async fn command_listener(mut rx: mpsc::Receiver<String>) {
-    while let Some(msg) = rx.recv().await {
-        println!("{}", msg);
-    }
-}
-
 #[derive(Debug, Default, Clone)]
 struct Player {
     pub seat: u8,
@@ -28,15 +13,16 @@ struct Player {
     pub role: Role,
     pub warnings: u8,
     pub status: Status,
-    pub is_nominated: bool,
+    pub is_nominee: Vec<bool>,
+    pub nominated: Vec<Option<u8>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 enum Status {
     #[default]
     Alive,
-    Dead,
-    Left,
+    Killed,
+    Eliminated,
 }
 
 impl Player {
@@ -47,7 +33,8 @@ impl Player {
             role,
             warnings: 0,
             status: Status::Alive,
-            is_nominated: false,
+            is_nominee: Vec::new(),
+            nominated: Vec::new(),
         }
     }
 
@@ -66,11 +53,11 @@ impl Player {
     }
 
     fn withdraw(&mut self) {
-        self.is_nominated = false;
+        self.nominated.pop();
     }
 
-    fn nominate(&mut self) {
-        self.is_nominated = true;
+    fn nominate(&mut self, position: Option<u8>) {
+        self.nominated.push(position);
     }
 }
 
@@ -165,6 +152,7 @@ impl Table {
 #[derive(Parser, Debug, Default, PartialEq, Eq)]
 enum Phase {
     #[default]
+    Registration,
     Night,
     Morning,
     Day,
@@ -174,6 +162,7 @@ enum Phase {
 impl Display for Phase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
+            Phase::Registration => "Registration",
             Phase::Night => "Night",
             Phase::Morning => "Morning",
             Phase::Day => "Day",
@@ -202,10 +191,12 @@ enum Action {
     Voting,
     Day,
     Night,
+    Morning,
     Show,
     Print,
+    Next,
     Quite,
-    Stopwatch { duration: Option<u64> },
+    Timer { duration: Option<u64> },
 }
 
 #[tokio::main]
@@ -241,7 +232,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mafia = MafiaCli::parse_from(clap_args);
 
         match &mafia.command {
-            Some(Action::Stopwatch { duration }) => {
+            Some(Action::Next) => match table.phase {
+                Phase::Registration => {
+                    table.phase = Phase::Night;
+                    println!("It is now Night.");
+                }
+                Phase::Night => {
+                    table.phase = Phase::Morning;
+                    println!("It is now Morning.");
+                }
+                Phase::Morning => {
+                    table.phase = Phase::Day;
+                    println!("It is now Day {}.", table.round);
+                }
+                Phase::Day => {
+                    table.phase = Phase::Voting;
+                    println!("It is now Voting phase.");
+                }
+                Phase::Voting => {
+                    table.phase = Phase::Night;
+                    table.round += 1;
+                    println!("It is now Night {}.", table.round);
+                }
+            },
+            Some(Action::Timer { duration }) => {
                 let secs = duration.unwrap_or(60);
                 let tx_clone = tx.clone();
                 tokio::spawn(async move {
@@ -251,36 +265,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         sleep(Duration::from_secs(1)).await;
                         seconds += 1;
                         if seconds == warning_time {
-                            let _ = tx_clone.send("10 seconds remaining!".to_string()).await;
+                            let _ = tx_clone.send("\n10 seconds remaining!\n".to_string()).await;
                         }
                         if seconds == secs {
-                            let _ = tx_clone.send("Time's up!".to_string()).await;
+                            let _ = tx_clone.send("\nTime's up!\n".to_string()).await;
                             break;
                         }
                         let _ = tx_clone.send(format!("Elapsed: {seconds}s")).await;
                     }
                 });
                 println!("Stopwatch started for {secs} seconds!");
-            }
-            Some(Action::Join { name }) => {
-                if table.available_positions.is_empty() {
-                    println!("The table is full. Cannot join.");
-                    continue;
-                }
-                if table.phase != Phase::Night && table.round != 0 {
-                    println!(
-                        "Players can only join during the Night phase before the game starts."
-                    );
-                    continue;
-                }
-                let mut chair = table.pick_chair();
-                chair.role = Some(table.pick_role());
-                chair.player = Some(Player::new(
-                    chair.position,
-                    name.clone(),
-                    chair.role.as_ref().unwrap().clone(),
-                ));
-                table.chairs[usize::from(chair.position - 1)] = chair.clone();
             }
             Some(Action::Show) => {
                 for chair in &table.chairs {
@@ -292,24 +286,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         println!("Seat {}: Empty", chair.position);
                     }
-                }
-            }
-            Some(Action::Left { position }) => {
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if chair.player.is_some() {
-                        chair.player = None;
-                        if let Some(role) = &chair.role {
-                            table.available_roles.push(role.clone());
-                        }
-                        chair.role = None;
-                        table.available_positions.push(pos);
-                        println!("Player at seat {pos} has left the game.");
-                    } else {
-                        println!("Seat {pos} is already empty.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
                 }
             }
             Some(Action::Warn { position }) => {
@@ -344,6 +320,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Invalid seat number: {pos}");
                 }
             }
+            Some(Action::Join { name }) => {
+                if table.available_positions.is_empty() {
+                    println!("The table is full. Moving to next phase");
+                    table.phase = Phase::Night;
+                    continue;
+                }
+                if table.phase != Phase::Registration && table.round != 0 {
+                    println!(
+                        "Players can only join during the Registration phase before the game starts."
+                    );
+                    continue;
+                }
+                let mut chair = table.pick_chair();
+                chair.role = Some(table.pick_role());
+                chair.player = Some(Player::new(
+                    chair.position,
+                    name.clone(),
+                    chair.role.as_ref().unwrap().clone(),
+                ));
+                table.chairs[usize::from(chair.position - 1)] = chair.clone();
+            }
+            Some(Action::Left { position }) => {
+                if table.phase != Phase::Registration && table.round != 0 {
+                    println!(
+                        "Players can only leave during the Registration phase before the game starts."
+                    );
+                    continue;
+                }
+                let pos = *position;
+                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
+                    if chair.player.is_some() {
+                        chair.player = None;
+                        if let Some(role) = &chair.role {
+                            table.available_roles.push(role.clone());
+                        }
+                        chair.role = None;
+                        table.available_positions.push(pos);
+                        println!("Player at seat {pos} has left the game.");
+                    } else {
+                        println!("Seat {pos} is already empty.");
+                    }
+                } else {
+                    println!("Invalid seat number: {pos}");
+                }
+            }
             Some(Action::Shoot { position }) => {
                 if table.phase != Phase::Night {
                     println!("Shooting can only be done during the Night phase.");
@@ -352,7 +373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let pos = *position;
                 if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
                     if let Some(player) = &mut chair.player {
-                        player.status = Status::Dead;
+                        player.status = Status::Killed;
                         println!("Player {} at seat {} has been shot.", player.name, pos);
                     } else {
                         println!("No player at seat {pos} to shoot.");
@@ -365,7 +386,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let pos = *position;
                 if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
                     if let Some(player) = &mut chair.player {
-                        player.nominate();
+                        player.nominate(Some(pos));
                         println!("Player {} at seat {} has been nominated.", player.name, pos);
                     } else {
                         println!("No player at seat {pos} to nominate.");
@@ -424,6 +445,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 println!("It is now Night {}.", table.round);
+            }
+            Some(Action::Morning) => {
+                table.phase = Phase::Morning;
+                println!("It is now Morning {}.", table.round);
             }
             Some(Action::Print) => {
                 for chair in &table.chairs {
