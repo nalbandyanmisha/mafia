@@ -1,473 +1,318 @@
-use clap::{Parser, Subcommand};
-use rand::prelude::*;
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::io::Write;
-use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep};
+mod commands;
+use clap::Parser;
+use commands::{Action, AppStatus};
+use crossterm::{
+    cursor::MoveTo,
+    event::{self, Event as CEvent, KeyCode, KeyEvent},
+    execute,
+    terminal::{
+        self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        enable_raw_mode,
+    },
+};
+use mafia::Table;
+use std::io::{Write, stdout};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-#[derive(Debug, Default, Clone)]
-struct Player {
-    pub seat: u8,
-    pub name: String,
-    pub role: Role,
-    pub warnings: u8,
-    pub status: Status,
-    pub is_nominee: Vec<bool>,
-    pub nominated: Vec<Option<u8>>,
+#[derive(Default)]
+struct AppState {
+    timers: Vec<(u64, u64)>,
+    table: Table,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-enum Status {
-    #[default]
-    Alive,
-    Killed,
-    Eliminated,
+enum Event {
+    TimerTick { id: u64, remaining: u64 },
+    Command(Action),
 }
 
-impl Player {
-    fn new(seat: u8, name: String, role: Role) -> Self {
-        Player {
-            seat,
-            name,
-            role,
-            warnings: 0,
-            status: Status::Alive,
-            is_nominee: Vec::new(),
-            nominated: Vec::new(),
+/// spawn_timer: non-async helper that spawns a background task which uses an UnboundedSender.
+/// Uses synchronous tx.send(...) so it can be called from sync contexts without await.
+fn spawn_timer(id: u64, seconds: u64, tx: UnboundedSender<Event>, shutdown: Arc<AtomicBool>) {
+    tokio::spawn(async move {
+        let mut remaining = seconds;
+        while remaining > 0 && !shutdown.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            remaining = remaining.saturating_sub(1);
+            let _ = tx.send(Event::TimerTick { id, remaining });
         }
-    }
+    });
+}
 
-    fn add_warning(&mut self) {
-        self.warnings += 1;
-    }
+/// Input thread: runs in a normal OS thread and sends events via UnboundedSender synchronously.
+/// NOTE: this thread does NOT call enable_raw_mode()/disable_raw_mode() — main() does that.
+fn spawn_input_thread(
+    tx: UnboundedSender<Event>,
+    input_buffer: Arc<Mutex<String>>,
+    shutdown: Arc<AtomicBool>,
+) {
+    std::thread::spawn(move || {
+        // We do not call enable_raw_mode() here; main() enables raw mode.
+        // loop until shutdown
+        while !shutdown.load(Ordering::SeqCst) {
+            // poll with timeout so we can react to shutdown flag
+            if event::poll(Duration::from_millis(100)).unwrap_or(false) {
+                match event::read() {
+                    Ok(CEvent::Key(KeyEvent { code, .. })) => match code {
+                        KeyCode::Char(c) => {
+                            let mut buf = input_buffer.lock().unwrap();
+                            buf.push(c);
+                        }
+                        KeyCode::Backspace => {
+                            let mut buf = input_buffer.lock().unwrap();
+                            buf.pop();
+                        }
+                        KeyCode::Enter => {
+                            // capture and clear buffer
+                            let line = {
+                                let mut buf = input_buffer.lock().unwrap();
+                                let line = buf.trim().to_string();
+                                buf.clear();
+                                line
+                            };
 
-    fn reset_warnings(&mut self) {
-        self.warnings = 0;
-    }
+                            if line.is_empty() {
+                                continue;
+                            }
 
-    fn remove_warning(&mut self) {
-        if self.warnings > 0 {
-            self.warnings -= 1;
+                            let mut clap_args = vec!["mafia"];
+                            clap_args.extend(line.split_whitespace());
+
+                            match Mafia::try_parse_from(clap_args) {
+                                Ok(mafia) => {
+                                    if let Some(action) = mafia.command {
+                                        // send synchronously - UnboundedSender::send is not async
+                                        let _ = tx.send(Event::Command(action));
+                                    }
+                                }
+                                Err(e) => {
+                                    // print parse error; render loop will redraw soon
+                                    eprintln!("{}", e);
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            // send Quit synchronously
+                            let _ = tx.send(Event::Command(Action::Quit));
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
+            // timed out -> loop again and check shutdown
         }
-    }
 
-    fn withdraw(&mut self) {
-        self.nominated.pop();
-    }
-
-    fn nominate(&mut self, position: Option<u8>) {
-        self.nominated.push(position);
-    }
+        // nothing to do here for raw mode disable; main will cleanup raw mode.
+    });
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-enum Role {
-    #[default]
-    Citizen,
-    Mafia,
-    Don,
-    Sheriff,
-}
+/// Render loop: redraws only the area above the input row and reprints the input line contents.
+/// It never overwrites the input row.
+async fn render_loop(
+    state: Arc<Mutex<AppState>>,
+    input_buffer: Arc<Mutex<String>>,
+    shutdown: Arc<AtomicBool>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stdout = stdout();
 
-#[derive(Debug, Default, Clone)]
-struct Chair {
-    pub position: u8,
-    pub role: Option<Role>,
-    pub player: Option<Player>,
-}
+    // compute input row as bottom row of terminal (0-based)
+    let (cols, rows) = terminal::size()?;
+    // reserve last row (rows-1) for input prompt
+    let input_row: u16 = rows.saturating_sub(1);
 
-impl Chair {
-    fn new(position: u8) -> Self {
-        Chair {
-            position,
-            role: None,
-            player: None,
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            break;
         }
-    }
-}
 
-struct Table {
-    chairs: Vec<Chair>,
-    available_roles: Vec<Role>,
-    available_positions: Vec<u8>,
-    nominated_players: Vec<u8>,
-    votes: HashMap<u8, Vec<u8>>, // (nominee, votes)
-    phase: Phase,
-    round: u8,
-}
+        tokio::time::sleep(Duration::from_millis(250)).await;
 
-impl Table {
-    pub const SEATS: u8 = 10;
-    fn new() -> Self {
-        let chairs: Vec<Chair> = (1..=Self::SEATS).map(|pos| Chair::new(pos)).collect();
-        let available_roles = vec![
-            Role::Don,
-            Role::Mafia,
-            Role::Mafia,
-            Role::Sheriff,
-            Role::Citizen,
-            Role::Citizen,
-            Role::Citizen,
-            Role::Citizen,
-            Role::Citizen,
-            Role::Citizen,
-        ];
-        let available_positions: Vec<u8> = (1..=Self::SEATS).collect();
-        Table {
-            chairs,
-            available_roles,
-            available_positions,
-            nominated_players: Vec::new(),
-            votes: HashMap::new(),
-            phase: Phase::default(),
-            round: 0,
+        // snapshot state
+        let s = state.lock().unwrap();
+
+        // build lines to print for the "game view"
+        let mut lines: Vec<String> = Vec::new();
+
+        lines.push(format!(
+            "Phase: {}, Round: {}",
+            s.table.phase, s.table.round
+        ));
+        lines.push("Timers:".to_string());
+        for (id, remaining) in &s.timers {
+            lines.push(format!("  #{:>2}: {}s remaining", id, remaining));
         }
-    }
+        lines.push("".to_string());
 
-    fn pick_chair(&mut self) -> Chair {
-        let mut rng = rand::rng();
-        if let Some(&position) = self.available_positions.choose(&mut rng) {
-            self.available_positions.retain(|&x| x != position);
-            Chair::new(position)
-        } else {
-            println!("No available seats");
-            Chair::default()
+        // table: iterate chairs
+        for (chair, player) in &s.table.chairs_to_players {
+            if player.name.is_empty() {
+                lines.push(format!("Chair {:>2}: (empty)", chair.position));
+            } else {
+                lines.push(format!(
+                    "Chair {:>2}: {} | Role: {:?} | Status: {:?} | Warnings: {}",
+                    chair.position, player.name, player.role, player.status, player.warnings
+                ));
+            }
         }
-    }
 
-    fn pick_role(&mut self) -> Role {
-        let mut rng = rand::rng();
-        if let Some(pos) = self.available_roles.as_slice().choose(&mut rng).cloned() {
-            let index = self.available_roles.iter().position(|x| *x == pos).unwrap();
-            self.available_roles.remove(index);
-            pos
-        } else {
-            println!("No available roles");
-            Role::Citizen
+        drop(s); // release lock
+
+        // write each line to its row; do not touch the input_row
+        for (i, line) in lines.iter().enumerate() {
+            let row = i as u16;
+            if row >= input_row {
+                // don't overwrite input row or go past it
+                break;
+            }
+            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))?;
+            // If too long for terminal width, truncate
+            let mut out = line.clone();
+            if out.len() as u16 > cols {
+                out.truncate(cols as usize);
+            }
+            write!(stdout, "{}", out)?;
         }
+
+        // clear any leftover rows from used_lines..input_row-1
+        let used = lines.len() as u16;
+        for row in used..input_row {
+            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))?;
+        }
+
+        // now re-print the prompt at input_row with current input buffer content
+        let buf = input_buffer.lock().unwrap().clone();
+        execute!(stdout, MoveTo(0, input_row), Clear(ClearType::CurrentLine))?;
+        // ensure prompt fits columns
+        let prompt = format!("> {}", buf);
+        let mut out_prompt = prompt.clone();
+        if out_prompt.len() as u16 > cols {
+            out_prompt.truncate(cols as usize);
+        }
+        write!(stdout, "{}", out_prompt)?;
+        stdout.flush()?;
     }
-}
 
-#[derive(Parser, Debug, Default, PartialEq, Eq)]
-enum Phase {
-    #[default]
-    Registration,
-    Night,
-    Morning,
-    Day,
-    Voting,
-}
-
-impl Display for Phase {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Phase::Registration => "Registration",
-            Phase::Night => "Night",
-            Phase::Morning => "Morning",
-            Phase::Day => "Day",
-            Phase::Voting => "Voting",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-#[derive(Parser, Debug)]
-#[command(name = "mafia", version, about = "Mafia game host CLI")]
-struct MafiaCli {
-    #[command(subcommand)]
-    command: Option<Action>,
-}
-
-#[derive(Subcommand, Debug)]
-enum Action {
-    Join { name: String },
-    Left { position: u8 },
-    Warn { position: u8 },
-    Pardon { position: u8 },
-    Nominate { position: u8 },
-    Withdraw { position: u8 },
-    Shoot { position: u8 },
-    Voting,
-    Day,
-    Night,
-    Morning,
-    Show,
-    Print,
-    Next,
-    Quite,
-    Timer { duration: Option<u64> },
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::{self, BufRead, Write};
-    use tokio::sync::mpsc;
-    use tokio::sync::oneshot;
-    use tokio::time::{Duration, sleep};
+    // enter alternate screen and enable raw mode
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    enable_raw_mode()?;
 
-    let (tx, mut rx) = mpsc::channel::<String>(32);
-    use std::sync::{Arc, Mutex};
-    let stopwatch_msg = Arc::new(Mutex::new(String::new()));
-    let stopwatch_msg_clone = stopwatch_msg.clone();
-    tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            let mut smsg = stopwatch_msg_clone.lock().unwrap();
-            *smsg = msg;
-        }
-    });
+    // use an unbounded channel so the blocking input thread can call send synchronously
+    let (tx, mut rx): (UnboundedSender<Event>, UnboundedReceiver<Event>) = unbounded_channel();
+    let state = Arc::new(Mutex::new(AppState::default()));
+    let input_buffer = Arc::new(Mutex::new(String::new()));
+    let shutdown = Arc::new(AtomicBool::new(false));
 
-    let mut table = Table::new();
+    // spawn input thread (blocking OS thread)
+    {
+        let tx_clone = tx.clone();
+        let input_clone = Arc::clone(&input_buffer);
+        let shutdown_clone = Arc::clone(&shutdown);
+        spawn_input_thread(tx_clone, input_clone, shutdown_clone);
+    }
 
-    loop {
-        let smsg = stopwatch_msg.lock().unwrap().clone();
-        print!("{}-{} [{}]> ", table.phase, table.round, smsg);
-        std::io::stdout().flush()?;
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        let args = input.trim().split_whitespace();
-        let mut clap_args = vec!["mafia"];
-        clap_args.extend(args);
+    // spawn render loop
+    {
+        let state_clone = Arc::clone(&state);
+        let input_clone = Arc::clone(&input_buffer);
+        let shutdown_clone = Arc::clone(&shutdown);
+        tokio::spawn(async move {
+            if let Err(e) = render_loop(state_clone, input_clone, shutdown_clone).await {
+                eprintln!("render loop error: {}", e);
+            }
+        });
+    }
 
-        let mafia = MafiaCli::parse_from(clap_args);
+    // main event consumer
+    let mut timer_id: u64 = 0;
 
-        match &mafia.command {
-            Some(Action::Next) => match table.phase {
-                Phase::Registration => {
-                    table.phase = Phase::Night;
-                    println!("It is now Night.");
-                }
-                Phase::Night => {
-                    table.phase = Phase::Morning;
-                    println!("It is now Morning.");
-                }
-                Phase::Morning => {
-                    table.phase = Phase::Day;
-                    println!("It is now Day {}.", table.round);
-                }
-                Phase::Day => {
-                    table.phase = Phase::Voting;
-                    println!("It is now Voting phase.");
-                }
-                Phase::Voting => {
-                    table.phase = Phase::Night;
-                    table.round += 1;
-                    println!("It is now Night {}.", table.round);
-                }
-            },
-            Some(Action::Timer { duration }) => {
-                let secs = duration.unwrap_or(60);
-                let tx_clone = tx.clone();
-                tokio::spawn(async move {
-                    let mut seconds = 0;
-                    let warning_time = secs.saturating_sub(10);
-                    loop {
-                        sleep(Duration::from_secs(1)).await;
-                        seconds += 1;
-                        if seconds == warning_time {
-                            let _ = tx_clone.send("\n10 seconds remaining!\n".to_string()).await;
+    while let Some(event) = rx.recv().await {
+        match event {
+            Event::Command(cmd) => {
+                match cmd {
+                    Action::Timer { seconds } => {
+                        // start timer
+                        timer_id += 1;
+                        let secs_u64 = seconds as u64;
+
+                        // push to state
+                        {
+                            let mut s = state.lock().unwrap();
+                            s.timers.push((timer_id, secs_u64));
                         }
-                        if seconds == secs {
-                            let _ = tx_clone.send("\nTime's up!\n".to_string()).await;
+
+                        // spawn background timer task which sends TimerTick events
+                        let tx_clone = tx.clone();
+                        let shutdown_clone = Arc::clone(&shutdown);
+                        spawn_timer(timer_id, secs_u64, tx_clone, shutdown_clone);
+                    }
+
+                    other_cmd => {
+                        // Apply command directly to the Table inside AppState
+
+                        // Take table out to avoid holding lock across await
+                        let mut s = state.lock().unwrap();
+                        let mut table = std::mem::take(&mut s.table);
+                        drop(s);
+
+                        let status = other_cmd.run(&mut table).await?;
+
+                        // put table back
+                        {
+                            let mut s = state.lock().unwrap();
+                            s.table = table;
+                        }
+
+                        if status == AppStatus::Quit {
+                            // set shutdown flag and break loop to begin graceful shutdown
+                            shutdown.store(true, Ordering::SeqCst);
                             break;
                         }
-                        let _ = tx_clone.send(format!("Elapsed: {seconds}s")).await;
-                    }
-                });
-                println!("Stopwatch started for {secs} seconds!");
-            }
-            Some(Action::Show) => {
-                for chair in &table.chairs {
-                    if let Some(player) = &chair.player {
-                        println!(
-                            "Seat {}: {} ({:?})",
-                            chair.position, player.name, player.role
-                        );
-                    } else {
-                        println!("Seat {}: Empty", chair.position);
                     }
                 }
             }
-            Some(Action::Warn { position }) => {
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if let Some(player) = &mut chair.player {
-                        player.add_warning();
-                        println!(
-                            "Player {} at seat {} has been warned. Total warnings: {}",
-                            player.name, pos, player.warnings
-                        );
-                    } else {
-                        println!("No player at seat {pos} to warn.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-            }
-            Some(Action::Pardon { position }) => {
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if let Some(player) = &mut chair.player {
-                        player.remove_warning();
-                        println!(
-                            "Player {} at seat {} has been pardoned. Total warnings: {}",
-                            player.name, pos, player.warnings
-                        );
-                    } else {
-                        println!("No player at seat {pos} to pardon.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-            }
-            Some(Action::Join { name }) => {
-                if table.available_positions.is_empty() {
-                    println!("The table is full. Moving to next phase");
-                    table.phase = Phase::Night;
-                    continue;
-                }
-                if table.phase != Phase::Registration && table.round != 0 {
-                    println!(
-                        "Players can only join during the Registration phase before the game starts."
-                    );
-                    continue;
-                }
-                let mut chair = table.pick_chair();
-                chair.role = Some(table.pick_role());
-                chair.player = Some(Player::new(
-                    chair.position,
-                    name.clone(),
-                    chair.role.as_ref().unwrap().clone(),
-                ));
-                table.chairs[usize::from(chair.position - 1)] = chair.clone();
-            }
-            Some(Action::Left { position }) => {
-                if table.phase != Phase::Registration && table.round != 0 {
-                    println!(
-                        "Players can only leave during the Registration phase before the game starts."
-                    );
-                    continue;
-                }
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if chair.player.is_some() {
-                        chair.player = None;
-                        if let Some(role) = &chair.role {
-                            table.available_roles.push(role.clone());
-                        }
-                        chair.role = None;
-                        table.available_positions.push(pos);
-                        println!("Player at seat {pos} has left the game.");
-                    } else {
-                        println!("Seat {pos} is already empty.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-            }
-            Some(Action::Shoot { position }) => {
-                if table.phase != Phase::Night {
-                    println!("Shooting can only be done during the Night phase.");
-                    continue;
-                }
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if let Some(player) = &mut chair.player {
-                        player.status = Status::Killed;
-                        println!("Player {} at seat {} has been shot.", player.name, pos);
-                    } else {
-                        println!("No player at seat {pos} to shoot.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-            }
-            Some(Action::Nominate { position }) => {
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if let Some(player) = &mut chair.player {
-                        player.nominate(Some(pos));
-                        println!("Player {} at seat {} has been nominated.", player.name, pos);
-                    } else {
-                        println!("No player at seat {pos} to nominate.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-                table.nominated_players.push(pos);
-            }
-            Some(Action::Withdraw { position }) => {
-                let pos = *position;
-                if let Some(chair) = table.chairs.get_mut(usize::from(pos - 1)) {
-                    if let Some(player) = &mut chair.player {
-                        player.withdraw();
-                        println!(
-                            "Player {} at seat {} has withdrawn nomination.",
-                            player.name, pos
-                        );
-                    } else {
-                        println!("No player at seat {pos} to withdraw.");
-                    }
-                } else {
-                    println!("Invalid seat number: {pos}");
-                }
-                if let Some(index) = table.nominated_players.iter().position(|x| *x == *position) {
-                    table.nominated_players.remove(index);
-                }
-            }
-            Some(Action::Voting) => {
-                table.phase = Phase::Voting;
-                println!("It is now Voting phase.");
-                println!("Nominated players in order: {:?}", table.nominated_players);
-                for nominee in &table.nominated_players {
-                    println!("Collecting votes for seat {nominee}.");
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input)?;
-                    let votes = input
-                        .split(',')
-                        .filter_map(|s| s.trim().parse::<u8>().ok())
-                        .collect();
 
-                    table.votes.insert(*nominee, votes);
+            Event::TimerTick { id, remaining } => {
+                let mut s = state.lock().unwrap();
+                if let Some(t) = s.timers.iter_mut().find(|t| t.0 == id) {
+                    t.1 = remaining;
                 }
-            }
-            Some(Action::Day) => {
-                table.phase = Phase::Day;
-                println!("It is now Day {}.", table.round);
-            }
-            Some(Action::Night) => {
-                table.phase = Phase::Night;
-                table.round += 1;
-                table.nominated_players = Vec::new();
-                for player in &mut table.chairs {
-                    if let Some(p) = &mut player.player {
-                        p.withdraw();
-                    }
-                }
-                println!("It is now Night {}.", table.round);
-            }
-            Some(Action::Morning) => {
-                table.phase = Phase::Morning;
-                println!("It is now Morning {}.", table.round);
-            }
-            Some(Action::Print) => {
-                for chair in &table.chairs {
-                    if let Some(player) = &chair.player {
-                        println!(
-                            "Seat {}: {} ({:?}) has {} warnings",
-                            chair.position, player.name, player.role, player.warnings
-                        );
-                    }
-                }
-            }
-            Some(Action::Quite) => {
-                println!("Quitting the Mafia CLI. Goodbye!");
-                break;
-            }
-            None => {
-                println!("No command provided.")
+                s.timers.retain(|t| t.1 > 0);
             }
         }
     }
+
+    // cleanup: ensure raw mode disabled and leave alternate screen
+    shutdown.store(true, Ordering::SeqCst);
+    disable_raw_mode()?;
+    execute!(stdout, LeaveAlternateScreen)?;
     Ok(())
+}
+
+/// Local clap wrapper used by input thread (same as before)
+#[derive(Parser, Debug)]
+#[command(name = "mafia", version, about = "Host of Mafia game", long_about = None)]
+struct Mafia {
+    #[command(subcommand)]
+    command: Option<Action>,
+}
+
+impl Mafia {
+    #[allow(dead_code)]
+    pub async fn run(&self, table: &mut Table) -> Result<AppStatus, Box<dyn std::error::Error>> {
+        if let Some(command) = &self.command {
+            command.run(table).await
+        } else {
+            println!("Welcome to Mafia, type the command to move forward");
+            Ok(AppStatus::Continue)
+        }
+    }
 }
