@@ -1,5 +1,9 @@
+use crate::engine::{
+    Engine,
+    commands::Command,
+    state::{chair::Chair, phase::Phase},
+};
 use clap::Parser;
-use mafia::{Chair, Phase, Role, Table};
 
 #[derive(Debug, Parser)]
 pub enum Action {
@@ -22,40 +26,45 @@ pub enum AppStatus {
 }
 
 impl Action {
-    pub async fn run(&self, table: &mut Table) -> Result<AppStatus, Box<dyn std::error::Error>> {
-        match (self, &table.phase) {
-            (Action::Join { name }, Phase::Registration) => {
-                table.join(name)?;
+    pub async fn run(&self, engine: &mut Engine) -> Result<AppStatus, Box<dyn std::error::Error>> {
+        match (self, &engine.state.phase) {
+            (Action::Join { name }, Phase::Lobby) => {
+                engine.apply(Command::Join { name: name.clone() })?;
                 Ok(AppStatus::Continue)
             }
-            (Action::Leave { name }, Phase::Registration) => {
-                table.leave(name)?;
+            (Action::Leave { name }, Phase::Lobby) => {
+                engine.apply(Command::Leave { name: name.clone() })?;
                 println!("Player {name} left the game.");
                 Ok(AppStatus::Continue)
             }
             (Action::Warn { position }, _) => {
-                table.warn(Chair::new(*position))?;
+                engine.apply(Command::Warn {
+                    chair: Chair::new(*position),
+                })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Pardon { position }, _) => {
-                table.pardon(Chair::new(*position))?;
+                engine.apply(Command::Pardon {
+                    chair: Chair::new(*position),
+                })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Shoot { position }, Phase::Night) => {
-                table.shoot(Chair::new(*position))?;
+                engine.apply(Command::Shoot {
+                    chair: Chair::new(*position),
+                })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Nominate { position }, Phase::Day) => {
-                table.nominate(Chair::new(*position))?;
-                Ok(AppStatus::Continue)
+                Chair::new(*position);
+                todo!("Implement nomination logic");
             }
             (Action::Next, _) => {
-                table.next_phase()?;
+                engine.apply(Command::NextPhase)?;
                 Ok(AppStatus::Continue)
             }
             (Action::Show, _) => {
-                table.render()?;
-                Ok(AppStatus::Continue)
+                todo!("Implement private role display logic");
             }
             (Action::Quit, _) => {
                 println!("Exiting the game.");

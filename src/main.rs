@@ -1,6 +1,8 @@
-mod commands;
+mod actions;
+mod engine;
+mod ui;
+use actions::{Action, AppStatus};
 use clap::Parser;
-use commands::{Action, AppStatus};
 use crossterm::{
     cursor::MoveTo,
     event::{self, Event as CEvent, KeyCode, KeyEvent},
@@ -10,7 +12,6 @@ use crossterm::{
         enable_raw_mode,
     },
 };
-use mafia::Table;
 use std::io::{Write, stdout};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,7 +21,16 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 #[derive(Default)]
 struct AppState {
     timers: Vec<(u64, u64)>,
-    table: Table,
+    engine: engine::Engine,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        AppState {
+            timers: Vec::new(),
+            engine: engine::Engine::new(),
+        }
+    }
 }
 
 enum Event {
@@ -141,7 +151,12 @@ async fn render_loop(
         }
         lines.push("".to_string());
 
-        let table_view = s.table.draw().clone();
+        let table_view = ui::cli::draw_table(
+            &s.engine.state.table,
+            s.engine.state.phase.clone(),
+            s.engine.state.current_round,
+        )
+        .clone();
         for row in table_view {
             lines.push(row.clone());
         }
@@ -194,7 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // use an unbounded channel so the blocking input thread can call send synchronously
     let (tx, mut rx): (UnboundedSender<Event>, UnboundedReceiver<Event>) = unbounded_channel();
-    let state = Arc::new(Mutex::new(AppState::default()));
+    let state = Arc::new(Mutex::new(AppState::new()));
     let input_buffer = Arc::new(Mutex::new(String::new()));
     let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -247,15 +262,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Take table out to avoid holding lock across await
                         let mut s = state.lock().unwrap();
-                        let mut table = std::mem::take(&mut s.table);
+                        let mut engine = std::mem::take(&mut s.engine);
                         drop(s);
 
-                        let status = other_cmd.run(&mut table).await?;
+                        let status = other_cmd.run(&mut engine).await?;
 
                         // put table back
                         {
                             let mut s = state.lock().unwrap();
-                            s.table = table;
+                            s.engine = engine;
                         }
 
                         if status == AppStatus::Quit {
@@ -294,13 +309,15 @@ struct Mafia {
 
 impl Mafia {
     #[allow(dead_code)]
-    pub async fn run(&self, table: &mut Table) -> Result<AppStatus, Box<dyn std::error::Error>> {
+    pub async fn run(
+        &self,
+        engine_state: &mut engine::Engine,
+    ) -> Result<AppStatus, Box<dyn std::error::Error>> {
         if let Some(command) = &self.command {
-            command.run(table).await
+            command.run(engine_state).await
         } else {
             println!("Welcome to Mafia, type the command to move forward");
             Ok(AppStatus::Continue)
         }
     }
 }
-
