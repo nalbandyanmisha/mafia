@@ -63,4 +63,12 @@ impl Table {
             None
         }
     }
+
+    pub fn get_player_by_chair_mut(&mut self, chair: &Chair) -> Option<&mut Player> {
+        self.chairs_to_players.get_mut(chair)
+    }
+
+    pub fn get_player_by_chair(&self, chair: &Chair) -> Option<&Player> {
+        self.chairs_to_players.get(chair)
+    }
 }

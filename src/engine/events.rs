@@ -5,7 +5,7 @@ pub enum Event {
     PlayerLeft { player: Player, chair: Chair },
     PlayerWarned { player: Player, chair: Chair },
     PlayerPardoned { player: Player, chair: Chair },
-    PlayerNominated { player: Player, chair: Chair },
+    PlayerNominated,
     PlayerKilled { player: Player, chair: Chair },
     PlayerElimenated { player: Player, chair: Chair },
     PhaseAdvanced,

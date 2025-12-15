@@ -155,6 +155,13 @@ async fn render_loop(
             &s.engine.state.table,
             s.engine.state.phase.clone(),
             s.engine.state.current_round,
+            s.engine
+                .state
+                .rounds
+                .get(&s.engine.state.current_round)
+                .cloned()
+                .unwrap_or_default(),
+            s.engine.state.current_speaker,
         )
         .clone();
         for row in table_view {

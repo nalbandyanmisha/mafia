@@ -1,12 +1,19 @@
+use crate::engine::state::chair::Chair;
 use crate::engine::state::phase::Phase;
-use crate::engine::state::round::RoundId;
+use crate::engine::state::round::{Round, RoundId};
 use crate::engine::state::table::Table;
 
-pub fn draw_table(table: &Table, phase: Phase, round: RoundId) -> Vec<String> {
+pub fn draw_table(
+    table: &Table,
+    phase: Phase,
+    round_id: RoundId,
+    round: Round,
+    current_speaker: Option<Chair>,
+) -> Vec<String> {
     let mut view: Vec<String> = vec![];
     match phase {
         Phase::Lobby => {
-            view.push(format!("Phase: Lobby, Round: {round}"));
+            view.push(format!("Phase: Lobby, Round: {round_id}"));
             for (chair, player) in &table.chairs_to_players {
                 if player.name.is_empty() {
                     view.push(format!("Chair: {:?} is unoccupied", chair.position));
@@ -19,14 +26,14 @@ pub fn draw_table(table: &Table, phase: Phase, round: RoundId) -> Vec<String> {
             }
         }
         Phase::Night => {
-            view.push(format!("Phase: Night, Round: {round}"));
+            view.push(format!("Phase: Night, Round: {round_id}"));
             for (chair, player) in &table.chairs_to_players {
                 view.push(format!(
                     "Chair: {:?}, Player: {}, Role: {:?}",
                     chair.position, player.name, player.role
                 ));
             }
-            if round == RoundId(0) {
+            if round_id == RoundId(0) {
                 view.push(
                         "To assigne players their roles, use the 'show' command during the night phase so you can see each player's role privately.".to_string()
                     );
@@ -39,8 +46,8 @@ pub fn draw_table(table: &Table, phase: Phase, round: RoundId) -> Vec<String> {
             }
         }
         Phase::Morning => {
-            view.push(format!("Phase: Morning, Round: {round}"));
-            if round == RoundId(0) {
+            view.push(format!("Phase: Morning, Round: {round_id}"));
+            if round_id == RoundId(0) {
                 view.push(
                         "The game has begun! Welcome to the first day of Mafia. As this is a first morning, there are no shooting to announce.".to_string()
                     );
@@ -58,7 +65,18 @@ pub fn draw_table(table: &Table, phase: Phase, round: RoundId) -> Vec<String> {
             }
         }
         Phase::Day => {
-            view.push(format!("Phase: Day, Round: {round}"));
+            let speaker = current_speaker.unwrap_or("No one is speaking".into());
+            let nominations = round.get_nominations();
+            view.push(format!(
+                "Phase: Day, Round: {round_id}, Current Speaker: {speaker}",
+            ));
+            view.push(format!(
+                "Nominations this round: {:?}",
+                nominations
+                    .iter()
+                    .map(|chair| format!("{:?}", chair.position))
+                    .collect::<Vec<String>>()
+            ));
             for (chair, player) in &table.chairs_to_players {
                 if player.name.is_empty() {
                     view.push(format!("Chair: {:?} is unoccupied", chair.position));
@@ -72,6 +90,14 @@ pub fn draw_table(table: &Table, phase: Phase, round: RoundId) -> Vec<String> {
         }
         Phase::Voting => {
             view.push("Phase: Voting".to_string());
+            let nominations = round.get_nominations();
+            view.push(format!(
+                "Nominations this round: {:?}",
+                nominations
+                    .iter()
+                    .map(|chair| format!("{:?}", chair.position))
+                    .collect::<Vec<String>>()
+            ));
         }
     }
     view

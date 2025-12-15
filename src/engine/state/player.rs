@@ -10,14 +10,17 @@ pub enum Status {
 }
 
 #[derive(Debug, Default, Clone)]
+pub struct WarningPenalty {
+    pending_silence: bool,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Player {
     pub name: String,
     pub role: Role,
     pub warnings: u8,
+    pub penalty: WarningPenalty,
     pub status: Status,
-    // index acts as a round in the game
-    pub is_nominee: Vec<bool>,
-    pub nominated: Vec<Option<u8>>,
 }
 
 impl Player {
@@ -26,15 +29,18 @@ impl Player {
             name,
             role,
             warnings: 0,
+            penalty: WarningPenalty::default(),
             status: Status::Alive,
-            is_nominee: vec![],
-            nominated: vec![],
         }
     }
     pub fn add_warning(&mut self) {
         self.warnings += 1;
         if self.warnings == 4 {
             self.status = Status::Removed;
+        }
+
+        if self.warnings == 3 {
+            self.penalty.pending_silence = true;
         }
     }
 
@@ -46,13 +52,5 @@ impl Player {
         if self.warnings > 0 {
             self.warnings -= 1;
         }
-    }
-
-    pub fn withdraw(&mut self) {
-        self.nominated.pop();
-    }
-
-    pub fn nominate(&mut self, position: Option<u8>) {
-        self.nominated.push(position);
     }
 }

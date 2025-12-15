@@ -12,6 +12,7 @@ pub enum Action {
     Warn { position: u8 },
     Pardon { position: u8 },
     Nominate { position: u8 },
+    NextSpeaker,
     Timer { seconds: u8 },
     Shoot { position: u8 },
     Next,
@@ -56,8 +57,14 @@ impl Action {
                 Ok(AppStatus::Continue)
             }
             (Action::Nominate { position }, Phase::Day) => {
-                Chair::new(*position);
-                todo!("Implement nomination logic");
+                engine.apply(Command::Nominate {
+                    target: Chair::new(*position),
+                })?;
+                Ok(AppStatus::Continue)
+            }
+            (Action::NextSpeaker, Phase::Day) => {
+                engine.apply(Command::NextSpeaker)?;
+                Ok(AppStatus::Continue)
             }
             (Action::Next, _) => {
                 engine.apply(Command::NextPhase)?;
