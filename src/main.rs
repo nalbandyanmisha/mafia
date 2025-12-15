@@ -54,8 +54,8 @@ fn spawn_input_thread(
         while !shutdown.load(Ordering::SeqCst) {
             // poll with timeout so we can react to shutdown flag
             if event::poll(Duration::from_millis(100)).unwrap_or(false) {
-                match event::read() {
-                    Ok(CEvent::Key(KeyEvent { code, .. })) => match code {
+                if let Ok(CEvent::Key(KeyEvent { code, .. })) = event::read() {
+                    match code {
                         KeyCode::Char(c) => {
                             let mut buf = input_buffer.lock().unwrap();
                             buf.push(c);
@@ -89,7 +89,7 @@ fn spawn_input_thread(
                                 }
                                 Err(e) => {
                                     // print parse error; render loop will redraw soon
-                                    eprintln!("{}", e);
+                                    eprintln!("{e}");
                                 }
                             }
                         }
@@ -98,8 +98,7 @@ fn spawn_input_thread(
                             let _ = tx.send(Event::Command(Action::Quit));
                         }
                         _ => {}
-                    },
-                    _ => {}
+                    }
                 }
             }
             // timed out -> loop again and check shutdown
@@ -128,7 +127,7 @@ async fn render_loop(
             break;
         }
 
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
         // snapshot state
         let s = state.lock().unwrap();
@@ -136,28 +135,16 @@ async fn render_loop(
         // build lines to print for the "game view"
         let mut lines: Vec<String> = Vec::new();
 
-        lines.push(format!(
-            "Phase: {}, Round: {}",
-            s.table.phase, s.table.round
-        ));
         lines.push("Timers:".to_string());
         for (id, remaining) in &s.timers {
-            lines.push(format!("  #{:>2}: {}s remaining", id, remaining));
+            lines.push(format!("  #{id:>2}: {remaining}s remaining"));
         }
         lines.push("".to_string());
 
-        // table: iterate chairs
-        for (chair, player) in &s.table.chairs_to_players {
-            if player.name.is_empty() {
-                lines.push(format!("Chair {:>2}: (empty)", chair.position));
-            } else {
-                lines.push(format!(
-                    "Chair {:>2}: {} | Role: {:?} | Status: {:?} | Warnings: {}",
-                    chair.position, player.name, player.role, player.status, player.warnings
-                ));
-            }
+        let table_view = s.table.draw().clone();
+        for row in table_view {
+            lines.push(row.clone());
         }
-
         drop(s); // release lock
 
         // write each line to its row; do not touch the input_row
@@ -173,7 +160,7 @@ async fn render_loop(
             if out.len() as u16 > cols {
                 out.truncate(cols as usize);
             }
-            write!(stdout, "{}", out)?;
+            write!(stdout, "{out}")?;
         }
 
         // clear any leftover rows from used_lines..input_row-1
@@ -186,12 +173,12 @@ async fn render_loop(
         let buf = input_buffer.lock().unwrap().clone();
         execute!(stdout, MoveTo(0, input_row), Clear(ClearType::CurrentLine))?;
         // ensure prompt fits columns
-        let prompt = format!("> {}", buf);
+        let prompt = format!("> {buf}");
         let mut out_prompt = prompt.clone();
         if out_prompt.len() as u16 > cols {
             out_prompt.truncate(cols as usize);
         }
-        write!(stdout, "{}", out_prompt)?;
+        write!(stdout, "{out_prompt}")?;
         stdout.flush()?;
     }
 
@@ -226,7 +213,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let shutdown_clone = Arc::clone(&shutdown);
         tokio::spawn(async move {
             if let Err(e) = render_loop(state_clone, input_clone, shutdown_clone).await {
-                eprintln!("render loop error: {}", e);
+                eprintln!("render loop error: {e}");
             }
         });
     }
@@ -316,3 +303,4 @@ impl Mafia {
         }
     }
 }
+

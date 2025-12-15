@@ -9,6 +9,7 @@ pub enum Action {
     Pardon { position: u8 },
     Nominate { position: u8 },
     Timer { seconds: u8 },
+    Shoot { position: u8 },
     Next,
     Show,
     Quit,
@@ -40,9 +41,12 @@ impl Action {
                 table.pardon(Chair::new(*position))?;
                 Ok(AppStatus::Continue)
             }
+            (Action::Shoot { position }, Phase::Night) => {
+                table.shoot(Chair::new(*position))?;
+                Ok(AppStatus::Continue)
+            }
             (Action::Nominate { position }, Phase::Day) => {
                 table.nominate(Chair::new(*position))?;
-                println!("Player at position {position} has been nominated.");
                 Ok(AppStatus::Continue)
             }
             (Action::Next, _) => {

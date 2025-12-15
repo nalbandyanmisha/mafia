@@ -117,8 +117,10 @@ pub struct Table {
     pub available_roles: Vec<Role>,
     pub available_positions: Vec<u8>,
     pub nominated_players: Vec<String>,
+    pub killed_players: Vec<Option<u8>>,
     pub round: u8,
     pub phase: Phase,
+    pub speaker: Option<u8>,
 }
 
 impl Table {
@@ -147,8 +149,10 @@ impl Table {
             available_roles,
             available_positions,
             nominated_players: vec![],
+            killed_players: vec![],
             round: 0,
             phase: Phase::Registration,
+            speaker: None,
         }
     }
 
@@ -236,6 +240,43 @@ impl Table {
             Ok(())
         } else {
             Err("Player not found".to_string())
+        }
+    }
+
+    pub fn shoot(&mut self, chair: Chair) -> Result<(), String> {
+        if let Some(player) = self.chairs_to_players.get_mut(&chair) {
+            player.status = Status::Killed;
+            self.killed_players.push(Some(chair.position));
+            Ok(())
+        } else {
+            Err("Player not found".to_string())
+        }
+    }
+
+    pub fn give_speaker_turn(&mut self) {
+        match self.phase {
+            Phase::Morning => {
+                if self.killed_players[self.round as usize].is_some() {
+                    self.speaker = Some(self.killed_players[self.round as usize].unwrap());
+                }
+            }
+            Phase::Day => {
+                todo!();
+            }
+            Phase::Voting => {
+                todo!();
+            }
+            _ => {}
+        }
+
+        if let Some(current_speaker) = self.speaker {
+            let mut next_position = current_speaker + 1;
+            if next_position > Self::SEATS {
+                next_position = 1;
+            }
+            self.speaker = Some(next_position);
+        } else {
+            self.speaker = Some(1);
         }
     }
 
@@ -362,6 +403,81 @@ impl Table {
         }
 
         Ok(())
+    }
+
+    pub fn draw(&self) -> Vec<String> {
+        let mut view: Vec<String> = vec![];
+        match self.phase {
+            Phase::Registration => {
+                view.push(format!("Phase: Registration, Round: {}", self.round));
+                for (chair, player) in &self.chairs_to_players {
+                    if player.name.is_empty() {
+                        view.push(format!("Chair: {:?} is unoccupied", chair.position));
+                    } else {
+                        view.push(format!(
+                            "Chair: {:?}, Player: {}",
+                            chair.position, player.name,
+                        ));
+                    }
+                }
+            }
+            Phase::Night => {
+                view.push(format!("Phase: Night, Round: {}", self.round));
+                for (chair, player) in &self.chairs_to_players {
+                    view.push(format!(
+                        "Chair: {:?}, Player: {}, Role: {:?}",
+                        chair.position, player.name, player.role
+                    ));
+                }
+                if self.round == 0 {
+                    view.push(
+                        "To assigne players their roles, use the 'show' command during the night phase so you can see each player's role privately.".to_string()
+                    );
+                    view.push(
+                        "After that give 5 seconds to Sheriff to investigate cityzens and 1 minute to Mafia to choose their strategy.".to_string()
+                    );
+                    view.push(
+                        "Once the time is up, proceed to the morning phase using the appropriate command.".to_string()
+                    );
+                }
+            }
+            Phase::Morning => {
+                view.push(format!("Phase: Morning, Round: {}", self.round));
+                if self.round == 0 {
+                    view.push(
+                        "The game has begun! Welcome to the first day of Mafia. As this is a first morning, there are no shooting to announce.".to_string()
+                    );
+                }
+
+                for (chair, player) in &self.chairs_to_players {
+                    if player.name.is_empty() {
+                        view.push(format!("Chair: {:?} is unoccupied", chair.position));
+                    } else {
+                        view.push(format!(
+                            "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
+                            chair.position, player.name, player.status, player.warnings
+                        ));
+                    }
+                }
+            }
+            Phase::Day => {
+                view.push(format!("Phase: Day, Round: {}", self.round));
+                for (chair, player) in &self.chairs_to_players {
+                    if player.name.is_empty() {
+                        view.push(format!("Chair: {:?} is unoccupied", chair.position));
+                    } else {
+                        view.push(format!(
+                            "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
+                            chair.position, player.name, player.status, player.warnings
+                        ));
+                    }
+                }
+            }
+            Phase::Voting => {
+                view.push("Phase: Voting".to_string());
+            }
+        }
+        view
     }
 }
 
