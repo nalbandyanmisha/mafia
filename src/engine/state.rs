@@ -1,4 +1,3 @@
-pub mod chair;
 pub mod nomination;
 pub mod phase;
 pub mod player;
@@ -8,14 +7,15 @@ pub mod table;
 pub mod vote;
 use round::Round;
 use std::collections::BTreeMap;
+use table::chair::Chair;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct State {
     pub table: table::Table,
     pub phase: phase::Phase,
     pub rounds: BTreeMap<round::RoundId, round::Round>,
     pub current_round: round::RoundId,
-    pub current_speaker: Option<chair::Chair>,
+    pub current_speaker: Option<Chair>,
 }
 
 impl State {

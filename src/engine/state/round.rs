@@ -1,5 +1,5 @@
-use crate::engine::state::chair::Chair;
 use crate::engine::state::nomination::Nomination;
+use crate::engine::state::table::chair::Chair;
 use crate::engine::state::vote::Vote;
 use std::collections::HashSet;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -1,7 +1,6 @@
-use crate::engine::state::chair::Chair;
 use crate::engine::state::phase::Phase;
 use crate::engine::state::round::{Round, RoundId};
-use crate::engine::state::table::Table;
+use crate::engine::state::table::{Table, chair::Chair};
 
 pub fn draw_table(
     table: &Table,
@@ -14,23 +13,22 @@ pub fn draw_table(
     match phase {
         Phase::Lobby => {
             view.push(format!("Phase: Lobby, Round: {round_id}"));
-            for (chair, player) in &table.chairs_to_players {
-                if player.name.is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair.position));
+            for (chair, player) in table.all_chairs() {
+                if player.name().is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", chair));
                 } else {
-                    view.push(format!(
-                        "Chair: {:?}, Player: {}",
-                        chair.position, player.name,
-                    ));
+                    view.push(format!("Chair: {:?}, Player: {}", chair, player.name()));
                 }
             }
         }
         Phase::Night => {
             view.push(format!("Phase: Night, Round: {round_id}"));
-            for (chair, player) in &table.chairs_to_players {
+            for (chair, player) in table.all_chairs() {
                 view.push(format!(
                     "Chair: {:?}, Player: {}, Role: {:?}",
-                    chair.position, player.name, player.role
+                    chair,
+                    player.name(),
+                    player.role()
                 ));
             }
             if round_id == RoundId(0) {
@@ -53,19 +51,24 @@ pub fn draw_table(
                     );
             }
 
-            for (chair, player) in &table.chairs_to_players {
-                if player.name.is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair.position));
+            for (chair, player) in table.all_chairs() {
+                if player.name().is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", chair));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
-                        chair.position, player.name, player.status, player.warnings
+                        chair,
+                        player.name(),
+                        player.status(),
+                        player.warnings()
                     ));
                 }
             }
         }
         Phase::Day => {
-            let speaker = current_speaker.unwrap_or("No one is speaking".into());
+            let speaker = current_speaker
+                .map(|c| c.position().to_string())
+                .unwrap_or_else(|| "No one is speaking".into());
             let nominations = round.get_nominations();
             view.push(format!(
                 "Phase: Day, Round: {round_id}, Current Speaker: {speaker}",
@@ -74,16 +77,19 @@ pub fn draw_table(
                 "Nominations this round: {:?}",
                 nominations
                     .iter()
-                    .map(|chair| format!("{:?}", chair.position))
+                    .map(|chair| format!("{:?}", chair))
                     .collect::<Vec<String>>()
             ));
-            for (chair, player) in &table.chairs_to_players {
-                if player.name.is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair.position));
+            for (chair, player) in table.all_chairs() {
+                if player.name().is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", chair));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
-                        chair.position, player.name, player.status, player.warnings
+                        chair,
+                        player.name(),
+                        player.status(),
+                        player.warnings()
                     ));
                 }
             }
@@ -95,7 +101,7 @@ pub fn draw_table(
                 "Nominations this round: {:?}",
                 nominations
                     .iter()
-                    .map(|chair| format!("{:?}", chair.position))
+                    .map(|chair| format!("{:?}", chair))
                     .collect::<Vec<String>>()
             ));
         }

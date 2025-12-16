@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
-#[derive(Default)]
 struct AppState {
     timers: Vec<(u64, u64)>,
     engine: engine::Engine,
@@ -269,7 +268,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Take table out to avoid holding lock across await
                         let mut s = state.lock().unwrap();
-                        let mut engine = std::mem::take(&mut s.engine);
+                        let mut engine = std::mem::replace(&mut s.engine, engine::Engine::new());
                         drop(s);
 
                         let status = other_cmd.run(&mut engine).await?;

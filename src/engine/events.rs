@@ -1,4 +1,4 @@
-use crate::engine::state::{chair::Chair, player::Player};
+use crate::engine::state::{player::Player, table::chair::Chair};
 
 pub enum Event {
     PlayerJoined { player: Player, chair: Chair },

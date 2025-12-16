@@ -1,4 +1,4 @@
-use super::chair::Chair;
+use super::table::chair::Chair;
 
 #[derive(Debug, Clone)]
 pub struct Nomination {

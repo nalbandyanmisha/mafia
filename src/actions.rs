@@ -1,7 +1,7 @@
 use crate::engine::{
     Engine,
     commands::Command,
-    state::{chair::Chair, phase::Phase},
+    state::{phase::Phase, table::chair::Chair},
 };
 use clap::Parser;
 
@@ -39,27 +39,39 @@ impl Action {
                 Ok(AppStatus::Continue)
             }
             (Action::Warn { position }, _) => {
-                engine.apply(Command::Warn {
-                    chair: Chair::new(*position),
-                })?;
+                let chair = engine
+                    .state
+                    .table
+                    .try_chair(*position)
+                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                engine.apply(Command::Warn { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Pardon { position }, _) => {
-                engine.apply(Command::Pardon {
-                    chair: Chair::new(*position),
-                })?;
+                let chair = engine
+                    .state
+                    .table
+                    .try_chair(*position)
+                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                engine.apply(Command::Pardon { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Shoot { position }, Phase::Night) => {
-                engine.apply(Command::Shoot {
-                    chair: Chair::new(*position),
-                })?;
+                let chair = engine
+                    .state
+                    .table
+                    .try_chair(*position)
+                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                engine.apply(Command::Shoot { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Nominate { position }, Phase::Day) => {
-                engine.apply(Command::Nominate {
-                    target: Chair::new(*position),
-                })?;
+                let target = engine
+                    .state
+                    .table
+                    .try_chair(*position)
+                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                engine.apply(Command::Nominate { target })?;
                 Ok(AppStatus::Continue)
             }
             (Action::NextSpeaker, Phase::Day) => {
