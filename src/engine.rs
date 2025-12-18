@@ -7,14 +7,14 @@ use self::{
     events::Event,
     state::{
         State,
-        nomination::Nomination,
         phase::Phase,
-        player::{Player, Status as PlayerStatus},
-        table::{Table, chair::Chair},
-        vote::Vote,
+        player::{LifeStatus as PlayerLifeStatus, Player},
+        table::Table,
+        table::chair::Chair,
     },
 };
 use anyhow::{Result, bail};
+use rand::prelude::*;
 
 #[derive(Debug)]
 pub struct Engine {
@@ -27,203 +27,102 @@ impl Engine {
             state: State::new(),
         }
     }
-    pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>, Box<dyn std::error::Error>> {
+    pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
         match cmd {
-            Command::Join { name } => {
-                let (chair, player) = self.join(&name)?;
-                Ok(vec![Event::PlayerJoined { player, chair }])
-            }
-            Command::Leave { name } => {
-                let (chair, player) = self.leave(&name).unwrap();
-                Ok(vec![Event::PlayerLeft { player, chair }])
-            }
-            Command::Warn { chair } => Ok(vec![Event::PlayerWarned {
-                player: self.warn(chair)?,
-                chair,
-            }]),
-            Command::Pardon { chair } => Ok(vec![Event::PlayerPardoned {
-                player: self.pardon(chair)?,
-                chair,
-            }]),
-            Command::Nominate { target } => {
-                self.nominate(target).map(|_| vec![Event::PlayerNominated])
-            }
-            Command::Shoot { chair } => Ok(vec![Event::PlayerKilled {
-                player: self.shoot(chair)?,
-                chair,
-            }]),
-            Command::NextPhase => self.next_phase().map(|_| vec![Event::PhaseAdvanced]),
-            Command::NextSpeaker => self.next_speaker().map(|_| vec![]),
+            Command::Join { name } => self.join(&name),
+            Command::Leave { name } => self.leave(&name),
+            Command::Warn { chair } => self.warn(chair),
+            Command::Pardon { chair } => self.pardon(chair),
+            Command::Nominate { target } => self.nominate(target),
+            Command::Shoot { chair } => self.shoot(chair),
+            Command::NextPhase => self.advance_phase(),
+            Command::NextSpeaker => self.advance_speaker(),
         }
     }
-
     // ------------------------------
     // Join / Leave
     // ------------------------------
-    fn join(&mut self, name: &str) -> Result<(Chair, Player), EngineError> {
-        if self.state.phase != Phase::Lobby {
-            return Err(EngineError::RegistrationClosed);
-        }
+    fn join(&mut self, name: &str) -> Result<Vec<Event>> {
+        self.ensure_phase(Phase::Lobby)?;
 
-        // Pick a position
-        let position = self
+        // Pick random seat
+        let chair = *self
             .state
-            .table
-            .pick_position()
-            .map_err(|_| EngineError::NoAvailableSeats)?;
+            .available_seats()
+            .choose(&mut rand::rng())
+            .ok_or_else(|| anyhow::anyhow!("No available seats"))?;
+        self.state.take_seat(chair)?;
 
-        let chair = self
+        // Pick random role
+        let role = *self
             .state
-            .table
-            .try_chair(position)
-            .map_err(|_| EngineError::NoAvailableSeats)?;
-
-        let role = self
-            .state
-            .table
-            .pick_role()
-            .map_err(|_| EngineError::NoAvailableRoles)?;
+            .available_roles()
+            .choose(&mut rand::rng())
+            .ok_or_else(|| anyhow::anyhow!("No available roles"))?;
+        self.state.take_role(role)?;
 
         let player = Player::new(name.to_string(), role);
+        self.state.assign_player(chair, player.clone())?;
 
-        self.state.table.assign_player(chair, player.clone());
-
-        Ok((chair, player))
+        Ok(vec![Event::PlayerJoined { player, chair }])
     }
 
-    fn leave(&mut self, name: &str) -> Result<(Chair, Player), EngineError> {
-        if self.state.phase != Phase::Lobby {
-            return Err(EngineError::RegistrationClosed);
-        }
-
-        let (chair, player) = self
+    fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
+        self.ensure_phase(Phase::Lobby)?;
+        let chair = self
             .state
-            .table
-            .all_chairs()
-            .find(|(_, p)| p.name() == name)
-            .map(|(c, p)| (*c, p.clone()))
-            .ok_or(EngineError::PlayerNotFound)?;
+            .chair_of_player(name)
+            .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
+        let player = self.state.player(chair)?.clone();
 
-        // Release seat and role
-        self.state.table.release_position(chair.position());
-        self.state.table.release_role(player.role());
-        self.state.table.remove_player(chair);
+        self.state.return_seat(chair);
+        self.state.return_role(player.role());
+        self.state.remove_player(chair)?;
 
-        Ok((chair, player))
+        Ok(vec![Event::PlayerLeft { player, chair }])
     }
 
     // ------------------------------
     // Player actions
     // ------------------------------
-    fn shoot(&mut self, chair: Chair) -> Result<Player, EngineError> {
-        let player = self
-            .state
-            .table
-            .get_player_mut(&chair)
-            .map_err(|_| EngineError::PlayerNotFound)?;
-
-        player.kill();
-        Ok(player.clone())
+    fn warn(&mut self, chair: Chair) -> Result<Vec<Event>> {
+        self.ensure_alive(chair)?;
+        let warnings = self.state.increment_player_warning(chair)?;
+        Ok(vec![Event::PlayerWarned { chair, warnings }])
     }
-
-    fn warn(&mut self, chair: Chair) -> Result<Player, EngineError> {
-        let player = self
-            .state
-            .table
-            .get_player_mut(&chair)
-            .map_err(|_| EngineError::PlayerNotFound)?;
-
-        player.add_warning();
-        Ok(player.clone())
+    fn pardon(&mut self, chair: Chair) -> Result<Vec<Event>> {
+        let warnings = self.state.deincrement_player_warning(chair)?;
+        Ok(vec![Event::PlayerPardoned { chair, warnings }])
     }
-
-    fn pardon(&mut self, chair: Chair) -> Result<Player, EngineError> {
-        let player = self
-            .state
-            .table
-            .get_player_mut(&chair)
-            .map_err(|_| EngineError::PlayerNotFound)?;
-
-        player.remove_warning();
-        Ok(player.clone())
+    fn shoot(&mut self, chair: Chair) -> Result<Vec<Event>> {
+        self.ensure_alive(chair)?;
+        self.state.mark_player_killed(chair)?;
+        Ok(vec![Event::PlayerKilled { chair }])
     }
-    pub fn nominate(&mut self, target: Chair) -> Result<(), Box<dyn std::error::Error>> {
+    fn nominate(&mut self, target: Chair) -> Result<Vec<Event>> {
         self.ensure_phase(Phase::Day)?;
-
         let by = self.current_speaker()?;
-
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
 
-        let current_round = self.state.current_round_mut();
+        self.state.add_nomination(by, target)?;
+        Ok(vec![Event::PlayerNominated { by, target }])
+    }
 
-        // Check if this speaker has already nominated
-        if current_round.nominations.iter().any(|n| n.by == by) {
-            return Err(format!(
-                "Player at chair {} has already nominated this round",
-                by.position()
-            )
-            .into());
+    fn advance_phase(&mut self) -> Result<Vec<Event>> {
+        if self.state.phase() == Phase::Voting {
+            self.state.start_new_round();
         }
 
-        current_round.nominations.push(Nomination { by, target });
+        let next = self.state.phase().advance_phase()?;
+        self.state.set_phase(next);
 
-        Ok(())
+        Ok(vec![Event::PhaseAdvanced { phase: next }])
     }
-
-    pub fn vote(&mut self, voter: Chair, target: Chair) -> Result<(), Box<dyn std::error::Error>> {
-        self.ensure_phase(Phase::Voting)?;
-
-        self.ensure_alive(voter)?;
-        self.ensure_alive(target)?;
-
-        self.state
-            .current_round_mut()
-            .votes
-            .push(Vote { voter, target });
-
-        Ok(())
-    }
-
-    // ------------------------------
-    // Phase / Speaker helpers
-    // ------------------------------
-    fn first_speaker_of_day(&self) -> Option<Chair> {
-        let start = (self.state.current_round.0 % Table::SEATS as usize) as u8 + 1;
-
-        self.find_next_alive_chair_from(start)
-    }
-
-    fn find_next_alive_chair_from(&self, start: u8) -> Option<Chair> {
-        for offset in 0..Table::SEATS {
-            let pos = ((start - 1 + offset) % Table::SEATS) + 1;
-            if let Ok(chair) = self.state.table.try_chair(pos) {
-                if self.state.table.get_player(&chair).map_or(false, |p| {
-                    p.status() == PlayerStatus::Alive && !p.name().is_empty()
-                }) {
-                    return Some(chair);
-                }
-            }
-        }
-        None
-    }
-
-    fn next_phase(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if self.state.phase == Phase::Voting {
-            self.state.current_round = self.state.current_round.next();
-        }
-        self.state.phase.next()?;
-
-        if self.state.phase == Phase::Day {
-            self.state.current_speaker = self.first_speaker_of_day();
-        }
-        Ok(())
-    }
-
-    fn next_speaker(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn advance_speaker(&mut self) -> Result<Vec<Event>> {
         let current = match self.state.current_speaker {
             Some(c) => c,
-            None => return Ok(()), // no speaker → already done
+            None => return Ok(vec![Event::EndDay]), // no speaker → already done
         };
 
         let next = self.find_next_alive_chair_from(current.position() + 1);
@@ -236,40 +135,56 @@ impl Engine {
             self.state.current_speaker = next;
         }
 
-        Ok(())
+        Ok(vec![Event::NextSpeaker {
+            chair: next.ok_or_else(|| anyhow::anyhow!("No next speaker found"))?,
+        }])
     }
 
+    fn first_speaker_of_day(&self) -> Option<Chair> {
+        let start = (self.state.current_round.0 % Table::SEATS as usize) as u8 + 1;
+
+        self.find_next_alive_chair_from(start)
+    }
+
+    fn find_next_alive_chair_from(&self, start: u8) -> Option<Chair> {
+        for offset in 0..Table::SEATS {
+            let pos = ((start - 1 + offset) % Table::SEATS) + 1;
+            if let Ok(chair) = self.state.table.chair(pos) {
+                if self.state.table.get_player(&chair).map_or(false, |p| {
+                    p.life_status() == PlayerLifeStatus::Alive && !p.name().is_empty()
+                }) {
+                    return Some(chair);
+                }
+            }
+        }
+        None
+    }
+
+    // ------------------------------
+    // Guards
+    // ------------------------------
     fn ensure_phase(&self, expected: Phase) -> Result<()> {
-        if self.state.phase != expected {
+        if self.state.phase() != expected {
             bail!(
-                "Action allowed only during {:?} phase, current phase is {:?}",
-                expected,
-                self.state.phase
+                "Wrong phase. Expected {expected:?}, got {:?}",
+                self.state.phase()
             );
         }
         Ok(())
     }
 
-    fn current_speaker(&self) -> Result<Chair, Box<dyn std::error::Error>> {
-        self.state
-            .current_speaker
-            .ok_or_else(|| "No active speaker".into())
-    }
-
-    fn ensure_alive(&self, chair: Chair) -> Result<(), EngineError> {
-        let player = self
-            .state
-            .table
-            .get_player(&chair)
-            .map_err(|_| EngineError::PlayerNotFound)?;
-
-        if matches!(
-            player.status(),
-            PlayerStatus::Killed | PlayerStatus::Removed | PlayerStatus::Eliminated
-        ) {
-            return Err(EngineError::PlayerDead(chair));
+    fn ensure_alive(&self, chair: Chair) -> Result<()> {
+        let player = self.state.player(chair)?;
+        if !player.is_alive() {
+            bail!("Player {chair:?} is not alive");
         }
         Ok(())
+    }
+
+    fn current_speaker(&self) -> Result<Chair> {
+        self.state
+            .current_speaker()
+            .ok_or_else(|| anyhow::anyhow!("No active speaker"))
     }
 }
 

@@ -1,6 +1,6 @@
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     #[default]
     Lobby,
@@ -10,21 +10,31 @@ pub enum Phase {
     Voting,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum PhaseError {
+    #[error("Cannot advance phase")]
+    CannotAdvance,
+}
+
 impl Phase {
-    pub fn next(&mut self) -> Result<(), String> {
+    pub fn advance_phase(&mut self) -> Result<Phase, PhaseError> {
         *self = match self {
             Phase::Lobby => Phase::Night,
             Phase::Night => Phase::Morning,
             Phase::Morning => Phase::Day,
             Phase::Day => Phase::Voting,
-            Phase::Voting => Phase::Night,
+            Phase::Voting => Phase::Night, // cycle after Voting
         };
-        Ok(())
+        Ok(self.phase())
+    }
+
+    pub fn phase(&self) -> Phase {
+        *self
     }
 }
 
 impl Display for Phase {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Phase::Lobby => "Lobby",
             Phase::Night => "Night",

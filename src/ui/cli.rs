@@ -15,7 +15,7 @@ pub fn draw_table(
             view.push(format!("Phase: Lobby, Round: {round_id}"));
             for (chair, player) in table.all_chairs() {
                 if player.name().is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair));
+                    view.push(format!("Chair: {chair:?} is unoccupied"));
                 } else {
                     view.push(format!("Chair: {:?}, Player: {}", chair, player.name()));
                 }
@@ -53,13 +53,13 @@ pub fn draw_table(
 
             for (chair, player) in table.all_chairs() {
                 if player.name().is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair));
+                    view.push(format!("Chair: {chair:?} is unoccupied"));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
                         chair,
                         player.name(),
-                        player.status(),
+                        player.life_status(),
                         player.warnings()
                     ));
                 }
@@ -69,7 +69,7 @@ pub fn draw_table(
             let speaker = current_speaker
                 .map(|c| c.position().to_string())
                 .unwrap_or_else(|| "No one is speaking".into());
-            let nominations = round.get_nominations();
+            let nominations = round.nominations();
             view.push(format!(
                 "Phase: Day, Round: {round_id}, Current Speaker: {speaker}",
             ));
@@ -77,18 +77,18 @@ pub fn draw_table(
                 "Nominations this round: {:?}",
                 nominations
                     .iter()
-                    .map(|chair| format!("{:?}", chair))
+                    .map(|chair| format!("{chair:?}"))
                     .collect::<Vec<String>>()
             ));
             for (chair, player) in table.all_chairs() {
                 if player.name().is_empty() {
-                    view.push(format!("Chair: {:?} is unoccupied", chair));
+                    view.push(format!("Chair: {chair:?} is unoccupied"));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
                         chair,
                         player.name(),
-                        player.status(),
+                        player.life_status(),
                         player.warnings()
                     ));
                 }
@@ -96,12 +96,12 @@ pub fn draw_table(
         }
         Phase::Voting => {
             view.push("Phase: Voting".to_string());
-            let nominations = round.get_nominations();
+            let nominations = round.nominations();
             view.push(format!(
                 "Nominations this round: {:?}",
                 nominations
                     .iter()
-                    .map(|chair| format!("{:?}", chair))
+                    .map(|chair| format!("{chair:?}"))
                     .collect::<Vec<String>>()
             ));
         }

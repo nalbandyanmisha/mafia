@@ -1,8 +1,4 @@
-use crate::engine::{
-    Engine,
-    commands::Command,
-    state::{phase::Phase, table::chair::Chair},
-};
+use crate::engine::{Engine, commands::Command, state::phase::Phase};
 use clap::Parser;
 
 #[derive(Debug, Parser)]
@@ -42,7 +38,7 @@ impl Action {
                 let chair = engine
                     .state
                     .table
-                    .try_chair(*position)
+                    .chair(*position)
                     .map_err(|e| format!("Invalid chair: {e}"))?;
                 engine.apply(Command::Warn { chair })?;
                 Ok(AppStatus::Continue)
@@ -51,7 +47,7 @@ impl Action {
                 let chair = engine
                     .state
                     .table
-                    .try_chair(*position)
+                    .chair(*position)
                     .map_err(|e| format!("Invalid chair: {e}"))?;
                 engine.apply(Command::Pardon { chair })?;
                 Ok(AppStatus::Continue)
@@ -60,7 +56,7 @@ impl Action {
                 let chair = engine
                     .state
                     .table
-                    .try_chair(*position)
+                    .chair(*position)
                     .map_err(|e| format!("Invalid chair: {e}"))?;
                 engine.apply(Command::Shoot { chair })?;
                 Ok(AppStatus::Continue)
@@ -69,7 +65,7 @@ impl Action {
                 let target = engine
                     .state
                     .table
-                    .try_chair(*position)
+                    .chair(*position)
                     .map_err(|e| format!("Invalid chair: {e}"))?;
                 engine.apply(Command::Nominate { target })?;
                 Ok(AppStatus::Continue)
@@ -93,3 +89,4 @@ impl Action {
         }
     }
 }
+

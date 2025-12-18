@@ -2,46 +2,29 @@ use super::role::Role;
 use std::fmt;
 
 /// Player status at the table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Status {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum LifeStatus {
+    #[default]
     Alive,
     Killed,
     Eliminated,
     Removed,
 }
 
-impl Default for Status {
-    fn default() -> Self {
-        Status::Alive
-    }
-}
-
 /// Warnings and penalties applied to a player.
 #[derive(Debug, Clone, Default)]
-pub struct WarningPenalty {
+struct WarningPenalty {
     pub pending_silence: bool,
 }
 
 /// Representation of a player.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Player {
     name: String,
     role: Role,
     warnings: u8,
     penalty: WarningPenalty,
-    status: Status,
-}
-
-impl Default for Player {
-    fn default() -> Self {
-        Player {
-            name: String::new(),
-            role: Role::Citizen, // default safe role
-            warnings: 0,
-            penalty: WarningPenalty::default(),
-            status: Status::default(),
-        }
-    }
+    life_status: LifeStatus,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -60,38 +43,55 @@ impl Player {
             role,
             warnings: 0,
             penalty: WarningPenalty::default(),
-            status: Status::Alive,
+            life_status: LifeStatus::Alive,
         }
     }
 
-    /// Player's display name
+    // identity
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Player's role
     pub fn role(&self) -> Role {
         self.role
     }
 
-    /// Current number of warnings
+    // observation
+    pub fn life_status(&self) -> LifeStatus {
+        self.life_status
+    }
+
+    pub fn is_alive(&self) -> bool {
+        matches!(self.life_status, LifeStatus::Alive)
+    }
+
+    pub fn is_removed(&self) -> bool {
+        matches!(self.life_status, LifeStatus::Removed)
+    }
+
+    pub fn is_dead(&self) -> bool {
+        matches!(
+            self.life_status,
+            LifeStatus::Killed | LifeStatus::Eliminated
+        )
+    }
+
+    pub fn is_eliminated(&self) -> bool {
+        matches!(self.life_status, LifeStatus::Eliminated)
+    }
+
+    // warnings
     pub fn warnings(&self) -> u8 {
         self.warnings
     }
-
-    /// Current status
-    pub fn status(&self) -> Status {
-        self.status
+    pub fn has_warnings(&self) -> bool {
+        self.warnings > 0
     }
-
-    /// Check if the player is alive
-    pub fn is_alive(&self) -> bool {
-        self.status == Status::Alive
+    pub fn is_silenced(&self) -> bool {
+        self.penalty.pending_silence
     }
-
-    /// Add a warning to the player, updating penalty/status if necessary
-    pub fn add_warning(&mut self) -> Result<(), PlayerError> {
-        if self.status == Status::Removed {
+    pub fn increment_warning(&mut self) -> Result<(), PlayerError> {
+        if self.life_status == LifeStatus::Removed {
             return Err(PlayerError::MaxWarningsReached);
         }
 
@@ -99,15 +99,13 @@ impl Player {
 
         match self.warnings {
             3 => self.penalty.pending_silence = true,
-            4 => self.status = Status::Removed,
+            4 => self.life_status = LifeStatus::Removed,
             _ => {}
         }
 
         Ok(())
     }
-
-    /// Remove a warning from the player
-    pub fn remove_warning(&mut self) -> Result<(), PlayerError> {
+    pub fn deincrement_warning(&mut self) -> Result<(), PlayerError> {
         if self.warnings == 0 {
             return Err(PlayerError::NoWarnings);
         }
@@ -118,30 +116,28 @@ impl Player {
         if self.warnings < 3 {
             self.penalty.pending_silence = false;
         }
-        if self.status == Status::Removed && self.warnings < 4 {
-            self.status = Status::Alive;
+        if self.life_status == LifeStatus::Removed && self.warnings < 4 {
+            self.life_status = LifeStatus::Alive;
         }
 
         Ok(())
     }
 
-    /// Reset all warnings and penalties
-    pub fn reset_warnings(&mut self) {
-        self.warnings = 0;
-        self.penalty.pending_silence = false;
-        if self.status == Status::Removed {
-            self.status = Status::Alive;
-        }
+    // explicit transitions
+    pub fn mark_killed(&mut self) {
+        self.life_status = LifeStatus::Killed;
     }
 
-    /// Manually kill the player
-    pub fn kill(&mut self) {
-        self.status = Status::Killed;
+    pub fn mark_eliminated(&mut self) {
+        self.life_status = LifeStatus::Eliminated;
     }
 
-    /// Manually eliminate the player (e.g., voted out)
-    pub fn eliminate(&mut self) {
-        self.status = Status::Eliminated;
+    pub fn mark_removed(&mut self) {
+        self.life_status = LifeStatus::Removed;
+    }
+
+    pub fn restore_alive(&mut self) {
+        self.life_status = LifeStatus::Alive;
     }
 }
 
@@ -152,7 +148,7 @@ impl fmt::Display for Player {
             "{} ({:?}) – Status: {:?}, Warnings: {}{}",
             self.name,
             self.role,
-            self.status,
+            self.life_status,
             self.warnings,
             if self.penalty.pending_silence {
                 ", Silenced"

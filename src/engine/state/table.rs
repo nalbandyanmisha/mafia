@@ -2,20 +2,33 @@ pub mod chair;
 
 use super::{player::Player, role::Role};
 use chair::{Chair, ChairError};
-use rand::prelude::*;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct Table {
-    chairs_to_players: BTreeMap<Chair, Player>,
+    seats: BTreeMap<Chair, Player>,
     available_roles: Vec<Role>,
-    available_positions: Vec<u8>,
+    available_seats: Vec<Chair>,
 }
 
 impl Table {
     pub const SEATS: u8 = 10;
 
+    /// Create an empty table with all chairs initialized.
     pub fn new() -> Self {
+        let mut seats = BTreeMap::new();
+
+        for position in 1..=Self::SEATS {
+            seats.insert(Chair::new(position), Player::default());
+        }
+
+        let mut available_seats = Vec::new();
+        for pos in 1..=Self::SEATS {
+            let chair = Chair::new(pos);
+            seats.insert(chair, Player::default());
+            available_seats.push(chair);
+        }
+
         let available_roles = vec![
             Role::Don,
             Role::Mafia,
@@ -28,25 +41,18 @@ impl Table {
             Role::Citizen,
             Role::Citizen,
         ];
-        let available_positions: Vec<u8> = (1..=Self::SEATS).collect();
 
-        let mut chairs_to_players = BTreeMap::new();
-        for position in 1..=Self::SEATS {
-            let chair = Chair::new(position);
-            chairs_to_players.insert(chair, Player::default());
-        }
-
-        Table {
-            chairs_to_players,
+        Self {
+            seats,
             available_roles,
-            available_positions,
+            available_seats,
         }
     }
 
     // --------------------------------------
     // Chair creation / validation
     // --------------------------------------
-    pub fn try_chair(&self, position: u8) -> Result<Chair, ChairError> {
+    pub fn chair(&self, position: u8) -> Result<Chair, ChairError> {
         if (1..=Self::SEATS).contains(&position) {
             Ok(Chair::new(position))
         } else {
@@ -54,81 +60,93 @@ impl Table {
         }
     }
 
-    // --------------------------------------
-    // Position management
-    // --------------------------------------
-    pub fn pick_position(&mut self) -> Result<u8, TableError> {
-        let mut rng = rand::rng();
-        if let Some(&position) = self.available_positions.choose(&mut rng) {
-            self.available_positions.retain(|&x| x != position);
-            Ok(position)
-        } else {
-            Err(TableError::NoAvailableSeats)
-        }
-    }
-
-    pub fn release_position(&mut self, position: u8) -> Result<(), TableError> {
-        if (1..=Self::SEATS).contains(&position) {
-            if !self.available_positions.contains(&position) {
-                self.available_positions.push(position);
+    pub fn get_chair(&self, name: &str) -> Option<Chair> {
+        for (chair, player) in &self.seats {
+            if player.name() == name {
+                return Some(*chair);
             }
-            Ok(())
-        } else {
-            Err(TableError::InvalidChair(position))
         }
+        None
     }
 
-    // --------------------------------------
-    // Role management
-    // --------------------------------------
-    pub fn pick_role(&mut self) -> Result<Role, TableError> {
-        let mut rng = rand::rng();
-
-        if let Some(role) = self.available_roles.choose(&mut rng).cloned() {
-            let index = self
-                .available_roles
-                .iter()
-                .position(|r| *r == role)
-                .unwrap();
-            self.available_roles.remove(index);
-            Ok(role)
-        } else {
-            Err(TableError::NoAvailableRoles)
-        }
+    // ---------------- Access available roles/seats ----------------
+    pub fn available_roles(&self) -> &[Role] {
+        &self.available_roles
     }
 
-    pub fn release_role(&mut self, role: Role) {
-        self.available_roles.push(role);
+    pub fn available_seats(&self) -> &[Chair] {
+        &self.available_seats
     }
-
     // --------------------------------------
     // Player access
     // --------------------------------------
     pub fn get_player(&self, chair: &Chair) -> Result<&Player, TableError> {
-        self.chairs_to_players
+        self.seats
             .get(chair)
             .ok_or(TableError::PlayerNotFound(*chair))
     }
 
     pub fn get_player_mut(&mut self, chair: &Chair) -> Result<&mut Player, TableError> {
-        self.chairs_to_players
+        self.seats
             .get_mut(chair)
             .ok_or(TableError::PlayerNotFound(*chair))
     }
 
-    pub fn assign_player(&mut self, chair: Chair, player: Player) -> Result<(), TableError> {
-        self.chairs_to_players.insert(chair, player);
+    // ---------------- Take/Return seats/role functions ----------------
+    pub fn take_role(&mut self, role: Role) -> Result<(), TableError> {
+        if let Some(pos) = self.available_roles.iter().position(|r| *r == role) {
+            self.available_roles.remove(pos);
+            Ok(())
+        } else {
+            Err(TableError::NoAvailableRoles)
+        }
+    }
+
+    pub fn return_role(&mut self, role: Role) {
+        self.available_roles.push(role);
+    }
+
+    pub fn take_seat(&mut self, chair: Chair) -> Result<(), TableError> {
+        if let Some(pos) = self.available_seats.iter().position(|c| *c == chair) {
+            self.available_seats.remove(pos);
+            Ok(())
+        } else {
+            Err(TableError::NoAvailableSeats)
+        }
+    }
+
+    pub fn return_seat(&mut self, chair: Chair) {
+        if !self.available_seats.contains(&chair) {
+            self.available_seats.push(chair);
+        }
+    }
+
+    // --------------------------------------
+    // Seat mutation
+    // --------------------------------------
+
+    pub fn seat_player(&mut self, chair: Chair, player: Player) -> Result<(), TableError> {
+        self.seats.insert(chair, player);
         Ok(())
     }
 
-    pub fn remove_player(&mut self, chair: Chair) -> Option<Player> {
-        let removed = self.chairs_to_players.get(&chair).cloned();
-        self.chairs_to_players.insert(chair, Player::default());
+    pub fn clear_seat(&mut self, chair: Chair) -> Option<Player> {
+        let removed = self.seats.get(&chair).cloned();
+        self.seats.insert(chair, Player::default());
         removed
     }
 
-    pub fn all_chairs(&self) -> impl Iterator<Item = (&Chair, &Player)> {
-        self.chairs_to_players.iter()
+    // --------------------------------------
+    // Iteration
+    // --------------------------------------
+
+    // Returns iterator over all seats and players
+    pub fn all_chairs(&self) -> impl Iterator<Item = (Chair, &Player)> {
+        self.seats.iter().map(|(c, p)| (*c, p))
+    }
+    /// Iterate over all chairs and their players.
+    pub fn iter(&self) -> impl Iterator<Item = (Chair, &Player)> {
+        self.seats.iter().map(|(c, p)| (*c, p))
     }
 }
 

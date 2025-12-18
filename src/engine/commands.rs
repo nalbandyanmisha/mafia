@@ -1,12 +1,14 @@
-use crate::engine::state::*;
+use crate::engine::state::table::chair::Chair;
 
+#[derive(Debug)]
 pub enum Command {
     Join { name: String },
     Leave { name: String },
-    Warn { chair: table::chair::Chair },
-    Pardon { chair: table::chair::Chair },
-    Nominate { target: table::chair::Chair },
-    Shoot { chair: table::chair::Chair },
+    Warn { chair: Chair },
+    Pardon { chair: Chair },
+    Nominate { target: Chair },
+    Shoot { chair: Chair },
     NextPhase,
     NextSpeaker,
 }
+

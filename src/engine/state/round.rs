@@ -1,7 +1,9 @@
-use crate::engine::state::nomination::Nomination;
-use crate::engine::state::table::chair::Chair;
-use crate::engine::state::vote::Vote;
-use std::collections::HashSet;
+mod nomination;
+mod vote;
+use super::table::chair::Chair;
+use nomination::Nomination;
+use std::collections::{HashMap, HashSet};
+use vote::Vote;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RoundId(pub usize);
 
@@ -19,11 +21,11 @@ impl RoundId {
 
 #[derive(Debug, Default, Clone)]
 pub struct Round {
-    pub nominations: Vec<Nomination>,
-    pub votes: Vec<Vote>,
-    pub kill: Option<Chair>,
-    pub eliminated_players: Vec<Chair>,
-    pub removed_players: Vec<Chair>,
+    nominations: Vec<Nomination>,
+    votes: Vec<Vote>,
+    night_kill: Option<Chair>,
+    eliminated: Vec<Chair>,
+    removed: Vec<Chair>,
 }
 
 impl Round {
@@ -31,32 +33,86 @@ impl Round {
         Round {
             nominations: Vec::new(),
             votes: Vec::new(),
-            kill: None,
-            eliminated_players: Vec::new(),
-            removed_players: Vec::new(),
+            night_kill: None,
+            eliminated: Vec::new(),
+            removed: Vec::new(),
         }
     }
 
-    pub fn nominate(&mut self, by: Chair, chair: Chair) {
-        self.nominations.push(Nomination { by, target: chair });
+    /* ---------------- Recording ---------------- */
+
+    pub fn record_nomination(&mut self, nominator: Chair, nominee: Chair) {
+        self.nominations.push(Nomination::new(nominator, nominee));
+    }
+    pub fn record_vote(&mut self, voter: Chair, nominee: Chair) {
+        self.votes.push(Vote::new(voter, nominee));
     }
 
-    pub fn vote(&mut self, voter: Chair, target: Chair) {
-        self.votes.push(Vote { voter, target });
+    pub fn record_night_kill(&mut self, chair: Chair) {
+        self.night_kill = Some(chair);
     }
 
-    pub fn get_nominations(&self) -> Vec<Chair> {
+    pub fn record_elimination(&mut self, chair: Chair) {
+        self.eliminated.push(chair);
+    }
+
+    pub fn record_removal(&mut self, chair: Chair) {
+        self.removed.push(chair);
+    }
+
+    /* ---------------- Queries ---------------- */
+
+    pub fn nominations(&self) -> &[Nomination] {
+        &self.nominations
+    }
+
+    pub fn votes(&self) -> &[Vote] {
+        &self.votes
+    }
+
+    pub fn night_kill(&self) -> Option<Chair> {
+        self.night_kill
+    }
+
+    pub fn eliminated_players(&self) -> &[Chair] {
+        &self.eliminated
+    }
+
+    pub fn removed_players(&self) -> &[Chair] {
+        &self.removed
+    }
+
+    /// Unique nominees in order of appearance
+    pub fn unique_nominees(&self) -> Vec<Chair> {
         let mut seen = HashSet::new();
-        let mut unique = Vec::new();
+        let mut result = Vec::new();
 
-        for nomination in &self.nominations {
-            let target = nomination.target;
-            if !seen.contains(&target) {
-                unique.push(target);
-                seen.insert(target);
+        for n in &self.nominations {
+            let nominee = n.nominee();
+            if seen.insert(nominee) {
+                result.push(nominee);
             }
         }
 
-        unique
+        result
+    }
+
+    /// Count votes per nominee
+    pub fn vote_tally(&self) -> HashMap<Chair, usize> {
+        let mut tally = HashMap::new();
+        for vote in &self.votes {
+            *tally.entry(vote.nominee()).or_insert(0) += 1;
+        }
+        tally
+    }
+
+    /// Check if a chair has already nominated this round
+    pub fn has_nominated(&self, chair: Chair) -> bool {
+        self.nominations.iter().any(|n| n.nominator() == chair)
+    }
+
+    /// Check if a chair has already voted this round
+    pub fn has_voted(&self, chair: Chair) -> bool {
+        self.votes.iter().any(|v| v.voter() == chair)
     }
 }
