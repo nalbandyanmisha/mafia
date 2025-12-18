@@ -158,3 +158,15 @@ impl fmt::Display for Player {
         )
     }
 }
+
+impl fmt::Display for LifeStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let status_str = match self {
+            LifeStatus::Alive => "Alive",
+            LifeStatus::Killed => "Killed",
+            LifeStatus::Eliminated => "Eliminated",
+            LifeStatus::Removed => "Removed",
+        };
+        write!(f, "{}", status_str)
+    }
+}

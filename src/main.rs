@@ -1,6 +1,6 @@
 mod actions;
 mod engine;
-mod ui;
+mod tui;
 
 use actions::{Action, AppStatus};
 use clap::Parser;
@@ -13,6 +13,7 @@ use crossterm::{
         enable_raw_mode,
     },
 };
+
 use std::io::{Write, stdout};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -124,7 +125,8 @@ async fn render_loop(
         }
         lines.push("".into());
 
-        let table_view = ui::cli::draw_table(&s.engine.view());
+        let table_view = tui::cli::draw_table(&s.engine.view());
+
         for row in table_view {
             lines.push(row);
         }
