@@ -9,6 +9,8 @@ use self::{
         State,
         phase::Phase,
         player::{LifeStatus as PlayerLifeStatus, Player},
+        role::Role,
+        round::RoundId,
         table::Table,
         table::chair::Chair,
     },
@@ -19,6 +21,22 @@ use rand::prelude::*;
 #[derive(Debug)]
 pub struct Engine {
     pub state: State,
+}
+
+pub struct GameView {
+    pub phase: Phase,
+    pub round_id: RoundId,
+    pub current_speaker: Option<Chair>,
+    pub seats: Vec<SeatView>,
+    pub nominations: Vec<(Chair, Chair)>,
+}
+
+pub struct SeatView {
+    pub chair: Chair,
+    pub name: String,
+    pub role: Role,
+    pub life_status: PlayerLifeStatus,
+    pub warnings: u8,
 }
 
 impl Engine {
@@ -38,6 +56,43 @@ impl Engine {
             Command::NextPhase => self.advance_phase(),
             Command::NextSpeaker => self.advance_speaker(),
         }
+    }
+
+    pub fn view(&self) -> GameView {
+        let round = self.state.rounds.get(&self.state.current_round);
+
+        GameView {
+            phase: self.state.phase(),
+            round_id: self.state.current_round,
+            current_speaker: self.state.current_speaker(),
+            seats: self
+                .state
+                .table
+                .iter()
+                .map(|(chair, p)| SeatView {
+                    chair,
+                    name: p.name().to_string(),
+                    role: p.role(),
+                    life_status: p.life_status(),
+                    warnings: p.warnings(),
+                })
+                .collect(),
+            nominations: round
+                .map(|r| {
+                    r.nominations()
+                        .iter()
+                        .map(|n| (n.nominator(), n.nominee()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    pub fn chair_from_position(&self, position: u8) -> anyhow::Result<Chair> {
+        self.state
+            .table
+            .chair(position)
+            .map_err(|e| anyhow::anyhow!("Invalid chair: {e}"))
     }
     // ------------------------------
     // Join / Leave

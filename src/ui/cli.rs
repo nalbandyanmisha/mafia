@@ -1,34 +1,29 @@
 use crate::engine::state::phase::Phase;
-use crate::engine::state::round::{Round, RoundId};
-use crate::engine::state::table::{Table, chair::Chair};
+use crate::engine::state::round::RoundId;
 
-pub fn draw_table(
-    table: &Table,
-    phase: Phase,
-    round_id: RoundId,
-    round: Round,
-    current_speaker: Option<Chair>,
-) -> Vec<String> {
+use crate::engine::GameView;
+
+pub fn draw_table(state: &GameView) -> Vec<String> {
     let mut view: Vec<String> = vec![];
-    match phase {
+    let round_id = state.round_id;
+    let seats = &state.seats;
+    match state.phase {
         Phase::Lobby => {
             view.push(format!("Phase: Lobby, Round: {round_id}"));
-            for (chair, player) in table.all_chairs() {
-                if player.name().is_empty() {
-                    view.push(format!("Chair: {chair:?} is unoccupied"));
+            for seat in seats {
+                if seat.name.is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", seat.chair));
                 } else {
-                    view.push(format!("Chair: {:?}, Player: {}", chair, player.name()));
+                    view.push(format!("Chair: {:?}, Player: {}", seat.chair, seat.name));
                 }
             }
         }
         Phase::Night => {
             view.push(format!("Phase: Night, Round: {round_id}"));
-            for (chair, player) in table.all_chairs() {
+            for seat in seats {
                 view.push(format!(
                     "Chair: {:?}, Player: {}, Role: {:?}",
-                    chair,
-                    player.name(),
-                    player.role()
+                    seat.chair, seat.name, seat.role
                 ));
             }
             if round_id == RoundId(0) {
@@ -51,25 +46,23 @@ pub fn draw_table(
                     );
             }
 
-            for (chair, player) in table.all_chairs() {
-                if player.name().is_empty() {
-                    view.push(format!("Chair: {chair:?} is unoccupied"));
+            for seat in seats {
+                if seat.name.is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", seat.chair));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
-                        chair,
-                        player.name(),
-                        player.life_status(),
-                        player.warnings()
+                        seat.chair, seat.name, seat.life_status, seat.warnings
                     ));
                 }
             }
         }
         Phase::Day => {
-            let speaker = current_speaker
+            let speaker = state
+                .current_speaker
                 .map(|c| c.position().to_string())
                 .unwrap_or_else(|| "No one is speaking".into());
-            let nominations = round.nominations();
+            let nominations = &state.nominations;
             view.push(format!(
                 "Phase: Day, Round: {round_id}, Current Speaker: {speaker}",
             ));
@@ -80,23 +73,20 @@ pub fn draw_table(
                     .map(|chair| format!("{chair:?}"))
                     .collect::<Vec<String>>()
             ));
-            for (chair, player) in table.all_chairs() {
-                if player.name().is_empty() {
-                    view.push(format!("Chair: {chair:?} is unoccupied"));
+            for seat in seats {
+                if seat.name.is_empty() {
+                    view.push(format!("Chair: {:?} is unoccupied", seat.chair));
                 } else {
                     view.push(format!(
                         "Chair: {:?}, Player: {}, Status: {:?}, Warnings: {}",
-                        chair,
-                        player.name(),
-                        player.life_status(),
-                        player.warnings()
+                        seat.chair, seat.name, seat.life_status, seat.warnings
                     ));
                 }
             }
         }
         Phase::Voting => {
             view.push("Phase: Voting".to_string());
-            let nominations = round.nominations();
+            let nominations = &state.nominations;
             view.push(format!(
                 "Nominations this round: {:?}",
                 nominations

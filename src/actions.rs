@@ -24,7 +24,8 @@ pub enum AppStatus {
 
 impl Action {
     pub async fn run(&self, engine: &mut Engine) -> Result<AppStatus, Box<dyn std::error::Error>> {
-        match (self, &engine.state.phase) {
+        let state = engine.view();
+        match (self, state.phase) {
             (Action::Join { name }, Phase::Lobby) => {
                 engine.apply(Command::Join { name: name.clone() })?;
                 Ok(AppStatus::Continue)
@@ -35,38 +36,22 @@ impl Action {
                 Ok(AppStatus::Continue)
             }
             (Action::Warn { position }, _) => {
-                let chair = engine
-                    .state
-                    .table
-                    .chair(*position)
-                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Warn { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Pardon { position }, _) => {
-                let chair = engine
-                    .state
-                    .table
-                    .chair(*position)
-                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Pardon { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Shoot { position }, Phase::Night) => {
-                let chair = engine
-                    .state
-                    .table
-                    .chair(*position)
-                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Shoot { chair })?;
                 Ok(AppStatus::Continue)
             }
             (Action::Nominate { position }, Phase::Day) => {
-                let target = engine
-                    .state
-                    .table
-                    .chair(*position)
-                    .map_err(|e| format!("Invalid chair: {e}"))?;
+                let target = engine.chair_from_position(*position)?;
                 engine.apply(Command::Nominate { target })?;
                 Ok(AppStatus::Continue)
             }

@@ -124,18 +124,7 @@ async fn render_loop(
         }
         lines.push("".into());
 
-        let table_view = ui::cli::draw_table(
-            &s.engine.state.table,
-            s.engine.state.phase(),
-            s.engine.state.current_round,
-            s.engine
-                .state
-                .rounds
-                .get(&s.engine.state.current_round)
-                .cloned()
-                .unwrap_or_default(),
-            s.engine.state.current_speaker(),
-        );
+        let table_view = ui::cli::draw_table(&s.engine.view());
         for row in table_view {
             lines.push(row);
         }
@@ -244,4 +233,3 @@ struct Mafia {
     #[command(subcommand)]
     command: Option<Action>,
 }
-
