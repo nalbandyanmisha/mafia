@@ -1,23 +1,123 @@
 use crate::engine::{GameView, SeatView};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Padding, Paragraph},
+    widgets::{Block, BorderType, Borders, Padding, Paragraph},
 };
 
-pub fn draw_chair(frame: &mut Frame, area: &Rect, view: &SeatView) -> Result<(), anyhow::Error> {
-    let name = if view.name.is_empty() {
+pub fn draw_player(frame: &mut Frame, area: &Rect, data: &SeatView) -> Result<(), anyhow::Error> {
+    let name = if data.name.is_empty() {
         "Empty"
     } else {
-        &view.name
+        &data.name
     };
-    let chair = Block::default()
+
+    let player_block = Block::default()
         .borders(Borders::ALL)
-        .title(format!("Chair {}", view.chair.position()))
+        .title(name)
         .style(Style::default().fg(Color::White));
-    frame.render_widget(Paragraph::new(name).block(chair), *area);
-    // Implementation for drawing a chair in the TUI
+    let player_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(30), Constraint::Percentage(70)])
+        .split(player_block.inner(*area));
+
+    frame.render_widget(player_block, *area);
+
+    draw_chair_box(frame, &player_layout[0], data)?;
+    draw_stats_box(frame, &player_layout[1], data)?;
+
+    // Implementation for drawing a player in the TUI
+    Ok(())
+}
+
+pub fn draw_chair_box(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &SeatView,
+) -> Result<(), anyhow::Error> {
+    let position_block = Block::bordered().border_type(BorderType::Rounded);
+    let position_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Percentage(50),
+            Constraint::Length(1),
+            Constraint::Percentage(50),
+        ])
+        .split(*area);
+    frame.render_widget(position_block, *area);
+
+    draw_chair_content(frame, &position_layout[1], view)?;
+
+    Ok(())
+}
+
+pub fn draw_chair_content(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &SeatView,
+) -> Result<(), anyhow::Error> {
+    let position_content =
+        Paragraph::new(format!("{}", view.chair.position())).alignment(Alignment::Center);
+    frame.render_widget(position_content, *area);
+    Ok(())
+}
+
+pub fn draw_stats_box(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &SeatView,
+) -> Result<(), anyhow::Error> {
+    let stats_block = Block::bordered().border_type(BorderType::Rounded);
+    let stats_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(stats_block.inner(*area));
+    frame.render_widget(stats_block, *area);
+
+    draw_warnings(frame, &stats_layout[0], view)?;
+    draw_role(frame, &stats_layout[1], view)?;
+    draw_life_status(frame, &stats_layout[2], view)?;
+    draw_nomination(frame, &stats_layout[3], view)?;
+    Ok(())
+}
+
+pub fn draw_warnings(frame: &mut Frame, area: &Rect, view: &SeatView) -> Result<(), anyhow::Error> {
+    let warnings_content =
+        Paragraph::new(format!("Warnings: {}", view.warnings)).alignment(Alignment::Left);
+    frame.render_widget(warnings_content, *area);
+    Ok(())
+}
+
+pub fn draw_role(frame: &mut Frame, area: &Rect, view: &SeatView) -> Result<(), anyhow::Error> {
+    let role_content = Paragraph::new(format!("Role: {}", view.role)).alignment(Alignment::Left);
+    frame.render_widget(role_content, *area);
+    Ok(())
+}
+
+pub fn draw_life_status(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &SeatView,
+) -> Result<(), anyhow::Error> {
+    let life_content =
+        Paragraph::new(format!("Status: {}", view.life_status)).alignment(Alignment::Left);
+    frame.render_widget(life_content, *area);
+    Ok(())
+}
+
+pub fn draw_nomination(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &SeatView,
+) -> Result<(), anyhow::Error> {
+    let nomination_content = Paragraph::new(format!("Nominations: ")).alignment(Alignment::Left);
+    frame.render_widget(nomination_content, *area);
     Ok(())
 }
 
@@ -60,12 +160,12 @@ pub fn draw_table(frame: &mut Frame, area: &Rect, view: &GameView) -> Result<(),
         .split(columns[1]);
 
     for (i, area) in left_chairs.iter().enumerate() {
-        draw_chair(frame, area, &view.seats[i + 1])?;
+        draw_player(frame, area, &view.seats[i])?;
     }
 
     // Render right side chairs (6–10)
     for (i, area) in right_chairs.iter().enumerate() {
-        draw_chair(frame, area, &view.seats[i + 5])?;
+        draw_player(frame, area, &view.seats[i + 5])?;
     }
 
     draw_host(frame, &host_area, view)?;
