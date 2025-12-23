@@ -1,237 +1,53 @@
 mod actions;
+mod app;
 mod engine;
 mod tui;
 
-use actions::{Action, AppStatus};
-use clap::Parser;
-use crossterm::{
-    cursor::MoveTo,
-    event::{self, Event as CEvent, KeyCode, KeyEvent},
-    execute,
-    terminal::{
-        self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
-        enable_raw_mode,
-    },
+use std::time::Duration;
+use tui::chair::{draw_command, draw_event, draw_table};
+
+use app::{App, AppStatus};
+use ratatui::{
+    Frame,
+    crossterm::event::{self, Event},
+    layout::{Constraint, Layout},
+    widgets::Block,
 };
 
-use std::io::{Write, stdout};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-
-struct AppState {
-    timers: Vec<(u64, u64)>,
-    engine: engine::Engine,
-}
-
-impl AppState {
-    pub fn new() -> Self {
-        AppState {
-            timers: Vec::new(),
-            engine: engine::Engine::new(),
-        }
-    }
-}
-
-enum Event {
-    TimerTick { id: u64, remaining: u64 },
-    Command(Action),
-}
-
-fn spawn_timer(id: u64, seconds: u64, tx: UnboundedSender<Event>, shutdown: Arc<AtomicBool>) {
-    tokio::spawn(async move {
-        let mut remaining = seconds;
-        while remaining > 0 && !shutdown.load(Ordering::SeqCst) {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            remaining = remaining.saturating_sub(1);
-            let _ = tx.send(Event::TimerTick { id, remaining });
-        }
-    });
-}
-
-fn spawn_input_thread(
-    tx: UnboundedSender<Event>,
-    input_buffer: Arc<Mutex<String>>,
-    shutdown: Arc<AtomicBool>,
-) {
-    std::thread::spawn(move || {
-        while !shutdown.load(Ordering::SeqCst) {
-            if event::poll(Duration::from_millis(100)).unwrap_or(false) {
-                if let Ok(CEvent::Key(KeyEvent { code, .. })) = event::read() {
-                    match code {
-                        KeyCode::Char(c) => {
-                            let mut buf = input_buffer.lock().unwrap();
-                            buf.push(c);
-                        }
-                        KeyCode::Backspace => {
-                            let mut buf = input_buffer.lock().unwrap();
-                            buf.pop();
-                        }
-                        KeyCode::Enter => {
-                            let line = {
-                                let mut buf = input_buffer.lock().unwrap();
-                                let line = buf.trim().to_string();
-                                buf.clear();
-                                line
-                            };
-                            if line.is_empty() {
-                                continue;
-                            }
-
-                            let mut clap_args = vec!["mafia"];
-                            clap_args.extend(line.split_whitespace());
-
-                            match Mafia::try_parse_from(clap_args) {
-                                Ok(mafia) => {
-                                    if let Some(action) = mafia.command {
-                                        let _ = tx.send(Event::Command(action));
-                                    }
-                                }
-                                Err(e) => eprintln!("{e}"),
-                            }
-                        }
-                        KeyCode::Esc => {
-                            let _ = tx.send(Event::Command(Action::Quit));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-    });
-}
-
-async fn render_loop(
-    state: Arc<Mutex<AppState>>,
-    input_buffer: Arc<Mutex<String>>,
-    shutdown: Arc<AtomicBool>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stdout = stdout();
-    let (cols, rows) = terminal::size()?;
-    let input_row = rows.saturating_sub(1);
-
-    loop {
-        if shutdown.load(Ordering::SeqCst) {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        let s = state.lock().unwrap();
-        let mut lines: Vec<String> = Vec::new();
-        lines.push("Timers:".into());
-        for (id, remaining) in &s.timers {
-            lines.push(format!("  #{id:>2}: {remaining}s remaining"));
-        }
-        lines.push("".into());
-
-        let table_view = tui::cli::draw_table(&s.engine.view());
-
-        for row in table_view {
-            lines.push(row);
-        }
-        drop(s);
-
-        for (i, line) in lines.iter().enumerate() {
-            let row = i as u16;
-            if row >= input_row {
-                break;
-            }
-            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))?;
-            let mut out = line.clone();
-            if out.len() as u16 > cols {
-                out.truncate(cols as usize);
-            }
-            write!(stdout, "{out}")?;
-        }
-
-        let used = lines.len() as u16;
-        for row in used..input_row {
-            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))?;
-        }
-
-        let buf = input_buffer.lock().unwrap().clone();
-        execute!(stdout, MoveTo(0, input_row), Clear(ClearType::CurrentLine))?;
-        let mut prompt = format!("> {buf}");
-        if prompt.len() as u16 > cols {
-            prompt.truncate(cols as usize);
-        }
-        write!(stdout, "{prompt}")?;
-        stdout.flush()?;
-    }
-
-    Ok(())
-}
-
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    enable_raw_mode()?;
+async fn main() -> anyhow::Result<()> {
+    tui::install_panic_hook();
+    let mut terminal = tui::init_terminal()?;
+    let mut app = App::new();
 
-    let (tx, mut rx): (UnboundedSender<Event>, UnboundedReceiver<Event>) = unbounded_channel();
-    let state = Arc::new(Mutex::new(AppState::new()));
-    let input_buffer = Arc::new(Mutex::new(String::new()));
-    let shutdown = Arc::new(AtomicBool::new(false));
+    // println!("Lattice points on circle of radius {radius}: {points:?}");
 
-    spawn_input_thread(tx.clone(), Arc::clone(&input_buffer), Arc::clone(&shutdown));
+    while app.status == AppStatus::Running {
+        terminal.draw(|f| view(&app, f))?;
 
-    let state_clone = Arc::clone(&state);
-    let input_clone = Arc::clone(&input_buffer);
-    let shutdown_clone = Arc::clone(&shutdown);
-    tokio::spawn(async move {
-        render_loop(state_clone, input_clone, shutdown_clone)
-            .await
-            .unwrap();
-    });
-
-    let mut timer_id: u64 = 0;
-
-    while let Some(event) = rx.recv().await {
-        match event {
-            Event::Command(cmd) => {
-                if let Action::Timer { seconds } = cmd {
-                    timer_id += 1;
-                    {
-                        let mut s = state.lock().unwrap();
-                        s.timers.push((timer_id, seconds as u64));
-                    }
-                    spawn_timer(timer_id, seconds as u64, tx.clone(), Arc::clone(&shutdown));
-                } else {
-                    let mut s = state.lock().unwrap();
-                    let mut engine = std::mem::replace(&mut s.engine, engine::Engine::new());
-                    drop(s);
-
-                    let status = cmd.run(&mut engine).await.unwrap_or(AppStatus::Continue);
-
-                    let mut s = state.lock().unwrap();
-                    s.engine = engine;
-
-                    if status == AppStatus::Quit {
-                        shutdown.store(true, Ordering::SeqCst);
-                        break;
-                    }
-                }
-            }
-            Event::TimerTick { id, remaining } => {
-                let mut s = state.lock().unwrap();
-                if let Some(t) = s.timers.iter_mut().find(|t| t.0 == id) {
-                    t.1 = remaining;
-                }
-                s.timers.retain(|t| t.1 > 0);
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                app.on_key(key.code);
             }
         }
     }
 
-    shutdown.store(true, Ordering::SeqCst);
-    disable_raw_mode()?;
-    execute!(stdout, LeaveAlternateScreen)?;
+    tui::restore_terminal()?;
     Ok(())
 }
 
-#[derive(Parser, Debug)]
-#[command(name = "mafia", version, about = "Host of Mafia game")]
-struct Mafia {
-    #[command(subcommand)]
-    command: Option<Action>,
+fn view(app: &App, frame: &mut Frame) {
+    use Constraint::{Fill, Length, Min};
+
+    let area = frame.area();
+    let [game_area, command_area] = Layout::vertical([Min(3), Length(3)]).areas(area);
+    let [table_area, event_area] = Layout::horizontal([Fill(3), Fill(1)]).areas(game_area);
+
+    frame.render_widget(Block::bordered().title("Command Input"), command_area);
+    frame.render_widget(Block::bordered().title("Event"), event_area);
+
+    let game_view = app.engine.view();
+    draw_command(frame, &command_area, &app.input).unwrap();
+    draw_table(frame, &table_area, &game_view).unwrap();
+    draw_event(frame, &event_area, &game_view).unwrap();
 }

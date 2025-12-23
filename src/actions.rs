@@ -16,62 +16,53 @@ pub enum Action {
     Quit,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum AppStatus {
-    Continue,
-    Quit,
-}
-
 impl Action {
-    pub async fn run(&self, engine: &mut Engine) -> Result<AppStatus, Box<dyn std::error::Error>> {
+    pub fn run(&self, engine: &mut Engine) -> Result<(), anyhow::Error> {
         let state = engine.view();
         match (self, state.phase) {
             (Action::Join { name }, Phase::Lobby) => {
                 engine.apply(Command::Join { name: name.clone() })?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Leave { name }, Phase::Lobby) => {
                 engine.apply(Command::Leave { name: name.clone() })?;
-                println!("Player {name} left the game.");
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Warn { position }, _) => {
                 let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Warn { chair })?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Pardon { position }, _) => {
                 let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Pardon { chair })?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Shoot { position }, Phase::Night) => {
                 let chair = engine.chair_from_position(*position)?;
                 engine.apply(Command::Shoot { chair })?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Nominate { position }, Phase::Day) => {
                 let target = engine.chair_from_position(*position)?;
                 engine.apply(Command::Nominate { target })?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::NextSpeaker, Phase::Day) => {
                 engine.apply(Command::NextSpeaker)?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Next, _) => {
                 engine.apply(Command::NextPhase)?;
-                Ok(AppStatus::Continue)
+                Ok(())
             }
             (Action::Show, _) => {
                 todo!("Implement private role display logic");
             }
-            (Action::Quit, _) => {
-                println!("Exiting the game.");
-                Ok(AppStatus::Quit)
+            (Action::Quit, _) => Ok(()),
+            (_, _) => {
+                Ok(()) // Ignore invalid actions for the current phase
             }
-            (_, _) => Ok(AppStatus::Continue),
         }
     }
 }
-
