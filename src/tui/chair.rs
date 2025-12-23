@@ -6,6 +6,22 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Padding, Paragraph},
 };
 
+pub fn view(frame: &mut Frame, app: &crate::app::App) {
+    use Constraint::{Fill, Length, Min};
+
+    let area = frame.area();
+    let [game_area, command_area] = Layout::vertical([Min(3), Length(3)]).areas(area);
+    let [table_area, event_area] = Layout::horizontal([Fill(3), Fill(1)]).areas(game_area);
+
+    frame.render_widget(Block::bordered().title("Command Input"), command_area);
+    frame.render_widget(Block::bordered().title("Event"), event_area);
+
+    let game_view = app.engine.view();
+    draw_command(frame, &command_area, &app.input).unwrap();
+    draw_table(frame, &table_area, &game_view, app.current_timer).unwrap();
+    draw_event(frame, &event_area, &game_view).unwrap();
+}
+
 pub fn draw_player(frame: &mut Frame, area: &Rect, data: &SeatView) -> Result<(), anyhow::Error> {
     let name = if data.name.is_empty() {
         "Empty"
@@ -16,16 +32,22 @@ pub fn draw_player(frame: &mut Frame, area: &Rect, data: &SeatView) -> Result<()
     let player_block = Block::default()
         .borders(Borders::ALL)
         .title(name)
+        .title_alignment(Alignment::Center)
         .style(Style::default().fg(Color::White));
     let player_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Percentage(30), Constraint::Percentage(70)])
+        .constraints(vec![
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ])
         .split(player_block.inner(*area));
 
     frame.render_widget(player_block, *area);
 
     draw_chair_box(frame, &player_layout[0], data)?;
     draw_stats_box(frame, &player_layout[1], data)?;
+    draw_timer_box(frame, &player_layout[2], Some(10))?;
 
     // Implementation for drawing a player in the TUI
     Ok(())
@@ -116,22 +138,83 @@ pub fn draw_nomination(
     area: &Rect,
     view: &SeatView,
 ) -> Result<(), anyhow::Error> {
-    let nomination_content = Paragraph::new(format!("Nominations: ")).alignment(Alignment::Left);
+    let nomination_content = Paragraph::new("Nominations").alignment(Alignment::Left);
     frame.render_widget(nomination_content, *area);
     Ok(())
 }
 
-pub fn draw_host(frame: &mut Frame, area: &Rect, view: &GameView) -> Result<(), anyhow::Error> {
-    let host = Block::default()
+pub fn draw_timer_box(
+    frame: &mut Frame,
+    area: &Rect,
+    timer: Option<u64>,
+) -> Result<(), anyhow::Error> {
+    let timer_block = Block::bordered().border_type(BorderType::Rounded);
+    let timer_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            Constraint::Percentage(40),
+            Constraint::Length(1),
+            Constraint::Percentage(40),
+        ])
+        .split(timer_block.inner(*area));
+    frame.render_widget(timer_block, *area);
+
+    draw_timer(frame, &timer_layout[1], timer)?;
+
+    Ok(())
+}
+
+pub fn draw_timer(frame: &mut Frame, area: &Rect, timer: Option<u64>) -> Result<(), anyhow::Error> {
+    let timer_str = if let Some(seconds) = timer {
+        format!("Time: {seconds}s",)
+    } else {
+        "No Timer".to_string()
+    };
+    let timer_content = Paragraph::new(timer_str).alignment(Alignment::Center);
+    frame.render_widget(timer_content, *area);
+    Ok(())
+}
+
+pub fn draw_host(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &GameView,
+    timer: Option<u64>,
+) -> Result<(), anyhow::Error> {
+    let host_block = Block::default()
         .borders(Borders::ALL)
         .padding(Padding::horizontal(50))
         .title("Host")
         .style(Style::default().fg(Color::Yellow));
-    frame.render_widget(Paragraph::new(view.phase.to_string()).block(host), *area);
+    let host_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ])
+        .split(host_block.inner(*area));
+
+    let round_area = host_layout[0];
+    let phase_area = host_layout[1];
+    let timer_area = host_layout[2];
+    let nominations_area = host_layout[3];
+    let something = host_layout[4];
+    frame.render_widget(host_block, *area);
+
+    draw_timer_box(frame, area, timer)?;
+
     Ok(())
 }
 
-pub fn draw_table(frame: &mut Frame, area: &Rect, view: &GameView) -> Result<(), anyhow::Error> {
+pub fn draw_table(
+    frame: &mut Frame,
+    area: &Rect,
+    view: &GameView,
+    timer: Option<u64>,
+) -> Result<(), anyhow::Error> {
     let table_block = Block::default()
         .borders(Borders::ALL)
         .padding(Padding::horizontal(10))
@@ -168,7 +251,7 @@ pub fn draw_table(frame: &mut Frame, area: &Rect, view: &GameView) -> Result<(),
         draw_player(frame, area, &view.seats[i + 5])?;
     }
 
-    draw_host(frame, &host_area, view)?;
+    draw_host(frame, &host_area, view, timer)?;
     frame.render_widget(table_block, *area);
 
     Ok(())
