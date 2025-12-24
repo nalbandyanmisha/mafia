@@ -19,6 +19,12 @@ impl RoundId {
     }
 }
 
+impl From<RoundId> for usize {
+    fn from(round_id: RoundId) -> Self {
+        round_id.0
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Round {
     nominations: Vec<Nomination>,

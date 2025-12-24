@@ -175,6 +175,28 @@ pub fn draw_timer(frame: &mut Frame, area: &Rect, timer: Option<u64>) -> Result<
     Ok(())
 }
 
+pub fn draw_phase(frame: &mut Frame, area: &Rect, phase: &str) -> Result<(), anyhow::Error> {
+    let phase_block = Block::default()
+        .borders(Borders::ALL)
+        .style(Style::default().fg(Color::Green));
+    frame.render_widget(&phase_block, *area);
+
+    let phase_content = Paragraph::new(format!("Phase: {phase}")).alignment(Alignment::Center);
+    frame.render_widget(phase_content, phase_block.inner(*area));
+    Ok(())
+}
+
+pub fn draw_round(frame: &mut Frame, area: &Rect, round: usize) -> Result<(), anyhow::Error> {
+    let round_block = Block::default()
+        .borders(Borders::ALL)
+        .style(Style::default().fg(Color::Blue));
+    frame.render_widget(&round_block, *area);
+
+    let round_content = Paragraph::new(format!("Round: {round}")).alignment(Alignment::Center);
+    frame.render_widget(round_content, round_block.inner(*area));
+    Ok(())
+}
+
 pub fn draw_host(
     frame: &mut Frame,
     area: &Rect,
@@ -183,28 +205,22 @@ pub fn draw_host(
 ) -> Result<(), anyhow::Error> {
     let host_block = Block::default()
         .borders(Borders::ALL)
-        .padding(Padding::horizontal(50))
         .title("Host")
         .style(Style::default().fg(Color::Yellow));
     let host_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(vec![
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-        ])
+        .constraints(Constraint::from_ratios([(2, 7), (3, 7), (2, 7)]))
         .split(host_block.inner(*area));
 
-    let round_area = host_layout[0];
-    let phase_area = host_layout[1];
-    let timer_area = host_layout[2];
-    let nominations_area = host_layout[3];
-    let something = host_layout[4];
+    let phase_area = host_layout[0];
+    let timer_area = host_layout[1];
+    let round_area = host_layout[2];
     frame.render_widget(host_block, *area);
 
-    draw_timer_box(frame, area, timer)?;
+    draw_phase(frame, &phase_area, &view.phase.to_string())?;
+    draw_round(frame, &round_area, view.round_id.into())?;
+
+    draw_timer_box(frame, &timer_area, timer)?;
 
     Ok(())
 }
