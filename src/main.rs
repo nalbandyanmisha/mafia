@@ -2,8 +2,8 @@ mod app;
 mod engine;
 mod tui;
 
-use app::{App, AppStatus, commands::Command as AppCommand, events::Event as AppEvent};
-use tui::chair::view;
+use app::{App, AppStatus, events::Event as AppEvent};
+use tui::draw_ui;
 
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use std::time::Duration;
@@ -64,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             _ = tick_interval.tick() => {
-                terminal.draw(|f| view(f, &app)).unwrap();
+                terminal.draw(|f| draw_ui(f, &app)).unwrap();
             }
         }
     }

@@ -1,6 +1,11 @@
 pub mod chair;
+pub mod layout;
+pub mod table;
+
+use crate::app::App;
+
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::CrosstermBackend,
     crossterm::{
         ExecutableCommand,
@@ -29,4 +34,9 @@ pub fn restore_terminal() -> anyhow::Result<()> {
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
     Ok(())
+}
+
+pub fn draw_ui(frame: &mut Frame, app: &App) {
+    let (table, event_log, command) = layout::draw_layout(frame);
+    table::draw_table(frame, table, 10);
 }
