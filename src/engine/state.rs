@@ -4,6 +4,8 @@ pub mod role;
 pub mod round;
 pub mod table;
 
+use crate::snapshot::{EngineData, Snapshot};
+
 use self::{
     phase::Phase,
     player::Player,
@@ -34,6 +36,23 @@ pub struct State {
     pub rounds: BTreeMap<RoundId, Round>,
     pub current_round: RoundId,
     pub current_speaker: Option<Chair>,
+}
+
+impl Snapshot for State {
+    type Output = EngineData;
+
+    fn snapshot(&self) -> Self::Output {
+        EngineData {
+            table: self.table.snapshot(),
+            phase: self.phase.to_string(),
+            round: self
+                .rounds
+                .get(&self.current_round)
+                .map_or_else(|| Round::new().snapshot(), |round| round.snapshot()),
+            current_round: self.current_round.0,
+            current_speaker: self.current_speaker.map(|c| c.snapshot()),
+        }
+    }
 }
 
 impl State {

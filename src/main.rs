@@ -1,8 +1,10 @@
 mod app;
 mod engine;
+mod snapshot;
 mod tui;
 
 use app::{App, AppStatus, events::Event as AppEvent};
+use snapshot::Snapshot;
 use tui::draw_ui;
 
 use ratatui::crossterm::event::{self, Event, KeyCode};
@@ -64,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             _ = tick_interval.tick() => {
-                terminal.draw(|f| draw_ui(f, &app)).unwrap();
+                terminal.draw(|f| draw_ui(f, &app.snapshot())).unwrap();
             }
         }
     }

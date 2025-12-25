@@ -1,6 +1,8 @@
 mod nomination;
 mod vote;
+
 use super::table::chair::Chair;
+use crate::snapshot::{RoundData, Snapshot};
 use nomination::Nomination;
 use std::collections::{HashMap, HashSet};
 use vote::Vote;
@@ -32,6 +34,14 @@ pub struct Round {
     night_kill: Option<Chair>,
     eliminated: Vec<Chair>,
     removed: Vec<Chair>,
+}
+
+impl Snapshot for Round {
+    type Output = RoundData;
+
+    fn snapshot(&self) -> Self::Output {
+        RoundData
+    }
 }
 
 impl Round {

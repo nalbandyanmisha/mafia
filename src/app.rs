@@ -4,10 +4,11 @@ pub mod parser;
 
 use crate::app::{commands::Command as AppCommand, events::Event as AppEvent, parser::parse_input};
 use crate::engine::{Engine, commands::Command as EngineCommand};
+use crate::snapshot::{AppData, Snapshot};
 use clap::Parser;
 use tokio::sync::mpsc;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum AppStatus {
     Running,
     Quit,
@@ -20,6 +21,18 @@ pub struct App {
 
     pub current_timer: Option<u64>, // <- NEW: store timer
     pub event_tx: mpsc::Sender<AppEvent>,
+}
+
+impl Snapshot for App {
+    type Output = AppData;
+
+    fn snapshot(&self) -> Self::Output {
+        AppData {
+            engine: self.engine.state.snapshot(),
+            input: self.input.clone(),
+            current_timer: self.current_timer,
+        }
+    }
 }
 
 impl App {

@@ -1,4 +1,5 @@
 use super::role::Role;
+use crate::snapshot::{PlayerData, Snapshot};
 use std::fmt;
 
 /// Player status at the table.
@@ -33,6 +34,18 @@ pub enum PlayerError {
     MaxWarningsReached,
     #[error("Cannot remove warning; player has zero warnings")]
     NoWarnings,
+}
+
+impl Snapshot for Player {
+    type Output = PlayerData;
+
+    fn snapshot(&self) -> Self::Output {
+        PlayerData {
+            name: self.name.clone(),
+            role: self.role.to_string(),
+            warnings: self.warnings,
+        }
+    }
 }
 
 impl Player {

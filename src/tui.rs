@@ -1,8 +1,9 @@
 pub mod chair;
+pub mod command;
 pub mod layout;
 pub mod table;
 
-use crate::app::App;
+use crate::snapshot::{AppData, Snapshot};
 
 use ratatui::{
     Frame, Terminal,
@@ -36,7 +37,9 @@ pub fn restore_terminal() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn draw_ui(frame: &mut Frame, app: &App) {
+pub fn draw_ui(frame: &mut Frame, app_data: &AppData) {
     let (table, event_log, command) = layout::draw_layout(frame);
-    table::draw_table(frame, table, 10);
+
+    table::draw_table(frame, table, 10, &app_data.engine.table).unwrap();
+    command::draw_command(frame, &command, &app_data.input).unwrap();
 }

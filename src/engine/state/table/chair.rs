@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::snapshot::{ChairData, Snapshot};
+
 /// Logical seat at the table.
 ///
 /// - Created only by `Table`
@@ -7,6 +9,16 @@ use std::fmt;
 /// - Immutable and copyable
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Chair(u8);
+
+impl Snapshot for Chair {
+    type Output = ChairData;
+
+    fn snapshot(&self) -> Self::Output {
+        ChairData {
+            position: self.0 as usize,
+        }
+    }
+}
 
 impl Chair {
     /// Create a chair at a given position.

@@ -1,5 +1,7 @@
 pub mod chair;
 
+use crate::snapshot::{Snapshot, TableData};
+
 use super::{player::Player, role::Role};
 use chair::{Chair, ChairError};
 use std::collections::BTreeMap;
@@ -9,6 +11,27 @@ pub struct Table {
     seats: BTreeMap<Chair, Player>,
     available_roles: Vec<Role>,
     available_seats: Vec<Chair>,
+}
+
+impl Snapshot for Table {
+    type Output = TableData;
+
+    fn snapshot(&self) -> Self::Output {
+        TableData {
+            seats: self
+                .seats
+                .iter()
+                .map(|(chair, player)| crate::snapshot::SeatData {
+                    chair: chair.snapshot(),
+                    player: if player.name().is_empty() {
+                        None
+                    } else {
+                        Some(player.snapshot())
+                    },
+                })
+                .collect(),
+        }
+    }
 }
 
 impl Table {
