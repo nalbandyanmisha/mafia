@@ -1,9 +1,8 @@
-pub mod phase;
 pub mod player;
-pub mod role;
 pub mod round;
 pub mod table;
 
+use crate::domain::{phase, role};
 use crate::snapshot::{EngineData, Snapshot};
 
 use self::{
@@ -44,7 +43,7 @@ impl Snapshot for State {
     fn snapshot(&self) -> Self::Output {
         EngineData {
             table: self.table.snapshot(),
-            phase: self.phase.to_string(),
+            phase: self.phase,
             round: self
                 .rounds
                 .get(&self.current_round)

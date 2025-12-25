@@ -7,7 +7,7 @@ use std::fmt;
 pub enum LifeStatus {
     #[default]
     Alive,
-    Killed,
+    Dead,
     Eliminated,
     Removed,
 }
@@ -42,8 +42,9 @@ impl Snapshot for Player {
     fn snapshot(&self) -> Self::Output {
         PlayerData {
             name: self.name.clone(),
-            role: self.role.to_string(),
+            role: self.role,
             warnings: self.warnings,
+            life_status: format!("{:?}", self.life_status).to_lowercase(),
         }
     }
 }
@@ -83,10 +84,7 @@ impl Player {
     }
 
     pub fn is_dead(&self) -> bool {
-        matches!(
-            self.life_status,
-            LifeStatus::Killed | LifeStatus::Eliminated
-        )
+        matches!(self.life_status, LifeStatus::Dead | LifeStatus::Eliminated)
     }
 
     pub fn is_eliminated(&self) -> bool {
@@ -138,7 +136,7 @@ impl Player {
 
     // explicit transitions
     pub fn mark_killed(&mut self) {
-        self.life_status = LifeStatus::Killed;
+        self.life_status = LifeStatus::Dead;
     }
 
     pub fn mark_eliminated(&mut self) {
@@ -176,7 +174,7 @@ impl fmt::Display for LifeStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let status_str = match self {
             LifeStatus::Alive => "Alive",
-            LifeStatus::Killed => "Killed",
+            LifeStatus::Dead => "Dead",
             LifeStatus::Eliminated => "Eliminated",
             LifeStatus::Removed => "Removed",
         };

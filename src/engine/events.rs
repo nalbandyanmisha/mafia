@@ -1,4 +1,5 @@
-use crate::engine::state::{phase::Phase, player::Player, table::chair::Chair};
+use crate::domain::phase::Phase;
+use crate::engine::state::{player::Player, table::chair::Chair};
 
 #[derive(Debug)]
 pub enum Event {

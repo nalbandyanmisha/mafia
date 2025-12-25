@@ -1,4 +1,5 @@
 mod app;
+mod domain;
 mod engine;
 mod snapshot;
 mod tui;
@@ -74,3 +75,4 @@ async fn main() -> anyhow::Result<()> {
     tui::restore_terminal()?;
     Ok(())
 }
+

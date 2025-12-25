@@ -1,3 +1,4 @@
+use crate::domain::{phase::Phase, role::Role};
 pub trait Snapshot {
     type Output;
 
@@ -5,18 +6,11 @@ pub trait Snapshot {
 }
 
 #[derive(Clone, Debug)]
-pub enum Role {
-    Citizen,
-    Mafia,
-    Don,
-    Sheriff,
-}
-
-#[derive(Clone, Debug)]
 pub struct PlayerData {
     pub name: String,
-    pub role: String,
+    pub role: Role,
     pub warnings: u8,
+    pub life_status: String,
 }
 
 #[derive(Clone, Debug)]
@@ -41,7 +35,7 @@ pub struct RoundData;
 #[derive(Clone, Debug)]
 pub struct EngineData {
     pub table: TableData,
-    pub phase: String,
+    pub phase: Phase,
     pub round: RoundData,
     pub current_speaker: Option<ChairData>,
     pub current_round: usize,
