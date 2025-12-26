@@ -13,7 +13,7 @@ use self::{
         table::chair::Chair,
     },
 };
-use crate::domain::phase::Phase;
+use crate::domain::phase::{CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, VotingPhase};
 use anyhow::{Result, bail};
 use rand::prelude::*;
 
@@ -51,7 +51,7 @@ impl Engine {
     // Join / Leave
     // ------------------------------
     fn join(&mut self, name: &str) -> Result<Vec<Event>> {
-        self.ensure_phase(Phase::Lobby)?;
+        self.ensure_phase(Phase::Lobby(LobbyPhase::Waiting))?;
 
         // Pick random seat
         let chair = *self
@@ -76,7 +76,7 @@ impl Engine {
     }
 
     fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
-        self.ensure_phase(Phase::Lobby)?;
+        self.ensure_phase(Phase::Lobby(LobbyPhase::Waiting))?;
         let chair = self
             .state
             .chair_of_player(name)
@@ -108,7 +108,7 @@ impl Engine {
         Ok(vec![Event::PlayerKilled { chair }])
     }
     fn nominate(&mut self, target: Chair) -> Result<Vec<Event>> {
-        self.ensure_phase(Phase::Day)?;
+        self.ensure_phase(Phase::Day(DayPhase::Discussion))?;
         let by = self.current_speaker()?;
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
@@ -117,16 +117,66 @@ impl Engine {
         Ok(vec![Event::PlayerNominated { by, target }])
     }
 
+    fn next_phase(&self) -> Phase {
+        use CheckPhase::*;
+        use DayPhase::*;
+        use LobbyPhase::*;
+        use NightPhase::*;
+        use Phase::*;
+        use VotingPhase::*;
+
+        match self.state.phase() {
+            // -------- Lobby --------
+            Lobby(Waiting) => {
+                if self.state.available_seats().is_empty() {
+                    Lobby(Ready)
+                } else {
+                    Lobby(Waiting)
+                }
+            }
+            Lobby(Ready) => {
+                if self.state.current_round == RoundId(0) {
+                    Night(RevealRoles)
+                } else {
+                    Night(MafiaShoot)
+                }
+            }
+
+            // -------- Night --------
+            Night(RevealRoles) => Night(MafiaIntro),
+            Night(MafiaIntro) => Night(MafiaShoot),
+            Night(MafiaShoot) => Night(Investigation(Sheriff)),
+            Night(Investigation(Sheriff)) => Night(Investigation(Don)),
+            Night(Investigation(Don)) => Day(Morning),
+
+            // -------- Day --------
+            Day(Morning) => Day(Discussion),
+            Day(Discussion) => Day(Voting(Nomination)),
+
+            // -------- Voting --------
+            Day(Voting(v)) => match v {
+                Nomination => Day(Voting(VoteCast)),
+                VoteCast => Day(Voting(Resolution)),
+                TieDiscussion => Day(Voting(TieRevote)),
+                TieRevote => Day(Voting(Resolution)),
+                Resolution => Night(MafiaShoot),
+            },
+        }
+    }
+
     fn advance_phase(&mut self) -> Result<Vec<Event>> {
-        if self.state.phase() == Phase::Voting {
+        if self.state.phase() == Phase::Day(DayPhase::Voting(VotingPhase::Resolution)) {
             self.state.start_new_round();
         }
 
-        let next = self.state.phase().advance_phase()?;
+        let next = self.next_phase();
         self.state.set_phase(next);
 
-        Ok(vec![Event::PhaseAdvanced { phase: next }])
+        Ok(vec![Event::PhaseAdvanced {
+            phase: self.state.phase(),
+        }])
     }
+
     fn advance_speaker(&mut self) -> Result<Vec<Event>> {
         let current = match self.state.current_speaker {
             Some(c) => c,
@@ -138,7 +188,7 @@ impl Engine {
         // If we looped back to the first speaker → Day ends
         if next == self.first_speaker_of_day() {
             self.state.current_speaker = None;
-            self.state.phase = Phase::Voting;
+            self.state.phase = Phase::Day(DayPhase::Voting(VotingPhase::Nomination));
         } else {
             self.state.current_speaker = next;
         }

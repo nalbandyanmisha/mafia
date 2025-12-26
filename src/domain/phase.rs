@@ -1,47 +1,56 @@
 use std::fmt::{self, Display};
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum Phase {
-    #[default]
-    Lobby,
-    Night,
-    Morning,
-    Day,
-    Voting,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PhaseError {
-    #[error("Cannot advance phase")]
-    CannotAdvance,
-}
-
-impl Phase {
-    pub fn advance_phase(&mut self) -> Result<Phase, PhaseError> {
-        *self = match self {
-            Phase::Lobby => Phase::Night,
-            Phase::Night => Phase::Morning,
-            Phase::Morning => Phase::Day,
-            Phase::Day => Phase::Voting,
-            Phase::Voting => Phase::Night, // cycle after Voting
-        };
-        Ok(self.phase())
-    }
-
-    pub fn phase(&self) -> Phase {
-        *self
-    }
-}
-
 impl Display for Phase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Phase::Lobby => "Lobby",
-            Phase::Night => "Night",
-            Phase::Morning => "Morning",
-            Phase::Day => "Day",
-            Phase::Voting => "Voting",
+        use Phase::*;
+        let text = match self {
+            Lobby(_) => "Lobby",
+            Night(_) => "Night",
+            Day(_) => "Day",
         };
-        write!(f, "{s}")
+        write!(f, "{text}")
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LobbyPhase {
+    Waiting,
+    Ready,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckPhase {
+    Sheriff,
+    Don,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NightPhase {
+    RevealRoles,
+    MafiaIntro,
+    MafiaShoot,
+    Investigation(CheckPhase),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VotingPhase {
+    Nomination,
+    VoteCast,
+    TieDiscussion,
+    TieRevote,
+    Resolution,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DayPhase {
+    Morning,
+    Discussion,
+    Voting(VotingPhase),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    Lobby(LobbyPhase),
+    Night(NightPhase),
+    Day(DayPhase),
 }

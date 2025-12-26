@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    domain::phase::Phase,
+    domain::phase::{DayPhase, LobbyPhase, Phase},
     snapshot::{AppData, EngineData},
 };
 
@@ -49,11 +49,11 @@ fn draw_host_header(
         engine_data.phase, engine_data.current_round
     );
     let style = match engine_data.phase {
-        Phase::Day => Style::default()
+        Phase::Day(DayPhase::Voting(_)) => Style::default().fg(Color::Magenta),
+        Phase::Day(_) => Style::default()
             .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD),
-        Phase::Night => Style::default().fg(Color::Blue),
-        Phase::Voting => Style::default().fg(Color::Magenta),
+        Phase::Night(_) => Style::default().fg(Color::Blue),
         _ => Style::default().fg(Color::Gray),
     };
 
@@ -71,9 +71,9 @@ fn draw_host_main(
     engine_data: &EngineData,
 ) -> Result<(), anyhow::Error> {
     let (title, subtitle) = match engine_data.phase {
-        Phase::Lobby => ("WAITING", None),
+        Phase::Lobby(LobbyPhase::Waiting) => ("WAITING", None),
 
-        Phase::Day => (
+        Phase::Day(DayPhase::Discussion) => (
             "DISCUSSION",
             engine_data
                 .current_speaker
@@ -81,9 +81,9 @@ fn draw_host_main(
                 .map(|c| format!("🗣️ Chair {}", c.position)),
         ),
 
-        Phase::Night => ("MAFIA ACTING", None),
+        Phase::Night(_) => ("MAFIA ACTING", None),
 
-        Phase::Voting => ("VOTING", None),
+        Phase::Day(DayPhase::Voting(_)) => ("VOTING", None),
 
         _ => ("", None),
     };

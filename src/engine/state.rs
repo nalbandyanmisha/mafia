@@ -60,7 +60,7 @@ impl State {
     pub fn new() -> Self {
         State {
             table: Table::new(),
-            phase: Phase::default(),
+            phase: Phase::Lobby(phase::LobbyPhase::Waiting),
             rounds: BTreeMap::new(),
             current_round: RoundId(0),
             current_speaker: None,
@@ -75,10 +75,6 @@ impl State {
 
     pub fn set_phase(&mut self, phase: Phase) {
         self.phase = phase;
-    }
-
-    pub fn advance_phase(&mut self) -> Phase {
-        self.phase.advance_phase().unwrap_or(self.phase)
     }
 
     /* ---------------- Speaker ---------------- */
