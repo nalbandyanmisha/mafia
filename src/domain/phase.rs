@@ -13,6 +13,13 @@ impl Display for Phase {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhaseKind {
+    Lobby,
+    Night,
+    Day,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LobbyPhase {
     Waiting,
     Ready,
@@ -26,8 +33,9 @@ pub enum CheckPhase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NightPhase {
-    RevealRoles,
-    MafiaIntro,
+    RoleAssignment,
+    SheriffReveal,
+    MafiaBriefing,
     MafiaShoot,
     Investigation(CheckPhase),
 }
@@ -53,4 +61,22 @@ pub enum Phase {
     Lobby(LobbyPhase),
     Night(NightPhase),
     Day(DayPhase),
+}
+
+impl Phase {
+    pub fn kind(&self) -> PhaseKind {
+        match self {
+            Phase::Lobby(_) => PhaseKind::Lobby,
+            Phase::Night(_) => PhaseKind::Night,
+            Phase::Day(_) => PhaseKind::Day,
+        }
+    }
+}
+
+pub enum TurnContext {
+    RoleAssignment,
+    DayDiscussion,
+    VotingDiscussion,
+    VoteCasting,
+    Investigation,
 }

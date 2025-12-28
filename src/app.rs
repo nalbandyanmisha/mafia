@@ -2,7 +2,7 @@ pub mod commands;
 pub mod events;
 pub mod parser;
 
-use crate::app::{commands::Command as AppCommand, events::Event as AppEvent, parser::parse_input};
+use crate::app::{commands::Command as AppCommand, events::Event as AppEvent};
 use crate::engine::{Engine, commands::Command as EngineCommand};
 use crate::snapshot::{AppData, Snapshot};
 use clap::Parser;
@@ -73,6 +73,25 @@ impl App {
                 let _ = self.engine.apply(EngineCommand::Leave { name });
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
+
+            Start => {
+                let _ = self.engine.apply(EngineCommand::Start);
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
+
+            AdvanceActor => {
+                let _ = self.engine.apply(EngineCommand::AdvanceActor);
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
+
+            AssignRole => {
+                let _ = self.engine.apply(EngineCommand::AssignRole);
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
+            RevokeRole => {
+                let _ = self.engine.apply(EngineCommand::RevokeRole);
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
             Warn { position } => {
                 if let Ok(chair) = self.engine.chair_from_position(position) {
                     let _ = self.engine.apply(EngineCommand::Warn { chair });
@@ -101,10 +120,6 @@ impl App {
                 let _ = self.engine.apply(EngineCommand::NextPhase);
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
-            NextSpeaker => {
-                let _ = self.engine.apply(EngineCommand::NextSpeaker);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
         }
     }
 
@@ -121,10 +136,7 @@ impl App {
                 self.handle_command(cmd).await;
             }
             Err(err) => {
-                let _ = self
-                    .event_tx
-                    .send(AppEvent::Error(format!("{}", err)))
-                    .await;
+                let _ = self.event_tx.send(AppEvent::Error(format!("{err}"))).await;
             }
         }
 

@@ -40,6 +40,6 @@ pub fn restore_terminal() -> anyhow::Result<()> {
 pub fn draw_ui(frame: &mut Frame, app_data: &AppData) {
     let (table, event_log, command) = layout::draw_layout(frame);
 
-    table::draw_table(frame, table, 10, &app_data.engine.table, &app_data).unwrap();
+    table::draw_table(frame, table, 10, &app_data.engine.table, app_data).unwrap();
     command::draw_command(frame, &command, &app_data.input).unwrap();
 }

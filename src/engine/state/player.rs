@@ -22,7 +22,7 @@ struct WarningPenalty {
 #[derive(Debug, Clone, Default)]
 pub struct Player {
     name: String,
-    role: Role,
+    role: Option<Role>,
     warnings: u8,
     penalty: WarningPenalty,
     life_status: LifeStatus,
@@ -50,11 +50,11 @@ impl Snapshot for Player {
 }
 
 impl Player {
-    /// Create a new player with a name and role
-    pub fn new(name: String, role: Role) -> Self {
+    /// Create a new player with a name
+    pub fn new(name: String) -> Self {
         Player {
             name,
-            role,
+            role: None,
             warnings: 0,
             penalty: WarningPenalty::default(),
             life_status: LifeStatus::Alive,
@@ -66,8 +66,12 @@ impl Player {
         &self.name
     }
 
-    pub fn role(&self) -> Role {
+    pub fn role(&self) -> Option<Role> {
         self.role
+    }
+
+    pub fn set_role(&mut self, role: Option<Role>) {
+        self.role = role;
     }
 
     // observation

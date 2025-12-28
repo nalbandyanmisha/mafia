@@ -87,6 +87,11 @@ fn build_chair_frame(visual: &Visual, chair: &ChairData) -> Result<Block<'static
 fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>, anyhow::Error> {
     match player {
         Some(player) => {
+            let role = if let Some(r) = player.role {
+                format!("{r:?}",)
+            } else {
+                "No Role".to_string()
+            };
             let lines = vec![
                 Line::from(vec![
                     Span::styled(
@@ -99,10 +104,7 @@ fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>,
                         Style::default().fg(Color::Yellow),
                     ),
                 ]),
-                Line::from(vec![Span::styled(
-                    player.role.clone().to_string(),
-                    Style::default().fg(Color::Gray),
-                )]),
+                Line::from(vec![Span::styled(role, Style::default().fg(Color::Gray))]),
             ];
 
             Ok(Paragraph::new(lines)
@@ -115,8 +117,13 @@ fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>,
     }
 }
 
-pub fn draw_chair(frame: &mut Frame, area: Rect, seat: &SeatData) -> Result<(), anyhow::Error> {
-    let visual = match &seat.player {
+pub fn draw_chair(
+    frame: &mut Frame,
+    area: Rect,
+    seat: &SeatData,
+    actor: &Option<ChairData>,
+) -> Result<(), anyhow::Error> {
+    let mut visual = match &seat.player {
         Some(player) => match player.life_status.as_str() {
             "alive" => Visual::Alive,
             "dead" => Visual::Dead,
@@ -129,6 +136,11 @@ pub fn draw_chair(frame: &mut Frame, area: Rect, seat: &SeatData) -> Result<(), 
         },
         None => Visual::Empty,
     };
+
+    if actor.is_some() && actor.as_ref().unwrap().position == seat.chair.position {
+        visual = Visual::Speaking;
+    }
+
     let chair_frame = build_chair_frame(&visual, &seat.chair)?;
     let chair_content = build_chair_content(seat.player.clone())?;
 

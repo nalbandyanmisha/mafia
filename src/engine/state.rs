@@ -1,6 +1,9 @@
+pub mod actor;
 pub mod player;
 pub mod round;
 pub mod table;
+
+use actor::Actor;
 
 use crate::domain::{phase, role};
 use crate::snapshot::{EngineData, Snapshot};
@@ -35,6 +38,7 @@ pub struct State {
     pub rounds: BTreeMap<RoundId, Round>,
     pub current_round: RoundId,
     pub current_speaker: Option<Chair>,
+    pub actor: Actor,
 }
 
 impl Snapshot for State {
@@ -50,6 +54,7 @@ impl Snapshot for State {
                 .map_or_else(|| Round::new().snapshot(), |round| round.snapshot()),
             current_round: self.current_round.0,
             current_speaker: self.current_speaker.map(|c| c.snapshot()),
+            actor: self.actor.snapshot(),
         }
     }
 }
@@ -58,12 +63,14 @@ impl State {
     /* ---------------- Construction ---------------- */
 
     pub fn new() -> Self {
+        let table = Table::new();
         State {
-            table: Table::new(),
+            table: table.clone(),
             phase: Phase::Lobby(phase::LobbyPhase::Waiting),
             rounds: BTreeMap::new(),
             current_round: RoundId(0),
             current_speaker: None,
+            actor: Actor::new(table.chair(1).unwrap()), // Default actor at chair 1),
         }
     }
 
@@ -85,10 +92,6 @@ impl State {
 
     pub fn set_current_speaker(&mut self, chair: Option<Chair>) {
         self.current_speaker = chair;
-    }
-
-    pub fn clear_current_speaker(&mut self) {
-        self.current_speaker = None;
     }
 
     /* ---------------- Players / Table ---------------- */

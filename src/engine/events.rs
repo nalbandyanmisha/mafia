@@ -1,10 +1,13 @@
 use crate::domain::phase::Phase;
-use crate::engine::state::{player::Player, table::chair::Chair};
+use crate::engine::state::table::chair::Chair;
 
 #[derive(Debug)]
 pub enum Event {
-    PlayerJoined { player: Player, chair: Chair },
-    PlayerLeft { player: Player, chair: Chair },
+    PlayerJoined { player: String, chair: Chair },
+    PlayerLeft { player: String, chair: Chair },
+    GameStarted,
+    TurnCompleted,
+    ActorAdvanced { chair: Chair },
     PlayerWarned { chair: Chair, warnings: u8 },
     PlayerPardoned { chair: Chair, warnings: u8 },
     PlayerNominated { by: Chair, target: Chair },

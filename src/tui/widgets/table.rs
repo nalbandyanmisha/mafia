@@ -1,6 +1,6 @@
 use ratatui::{Frame, layout::Rect};
 
-use crate::snapshot::{AppData, SeatData, TableData};
+use crate::snapshot::{AppData, ChairData, SeatData, TableData};
 use crate::tui::widgets::host::draw_host;
 
 fn calculate_host_area(table_area: Rect) -> Rect {
@@ -128,9 +128,10 @@ fn draw_chairs_around_host(
     frame: &mut Frame,
     players_areas: &[Rect],
     seats: &[SeatData],
+    actor: &Option<ChairData>,
 ) -> Result<(), anyhow::Error> {
     for (i, area) in players_areas.iter().enumerate() {
-        crate::tui::widgets::chair::draw_chair(frame, *area, &seats[i].clone())?;
+        crate::tui::widgets::chair::draw_chair(frame, *area, &seats[i].clone(), actor)?;
     }
     Ok(())
 }
@@ -154,7 +155,7 @@ pub fn draw_table(
     );
     sort_player_areas_clockwise(&host_area, &mut players_areas);
     players_areas.rotate_right(6); // Adjust so player 1 is at bottom-left
-    draw_host(frame, host_area, app_data);
-    draw_chairs_around_host(frame, &players_areas, &table.seats).unwrap();
+    draw_host(frame, host_area, app_data)?;
+    draw_chairs_around_host(frame, &players_areas, &table.seats, &app_data.engine.actor).unwrap();
     Ok(())
 }

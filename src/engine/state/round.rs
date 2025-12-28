@@ -1,8 +1,11 @@
 mod nomination;
 mod vote;
 
-use super::table::chair::Chair;
-use crate::snapshot::{RoundData, Snapshot};
+use super::{actor::Actor, table::chair::Chair};
+use crate::{
+    engine::turn::Turn,
+    snapshot::{RoundData, Snapshot},
+};
 use nomination::Nomination;
 use std::collections::{HashMap, HashSet};
 use vote::Vote;
@@ -41,6 +44,39 @@ impl Snapshot for Round {
 
     fn snapshot(&self) -> Self::Output {
         RoundData
+    }
+}
+
+impl Turn for Round {
+    fn next_actor<F>(&self, actor: &mut Actor, is_eligible: F) -> Option<Chair>
+    where
+        F: Fn(Chair) -> bool,
+    {
+        let nominees = self
+            .nominations()
+            .iter()
+            .map(|n| n.nominee())
+            .collect::<Vec<_>>();
+        if nominees.is_empty() || actor.is_completed() {
+            return None;
+        }
+
+        let start_idx = actor
+            .current()
+            .and_then(|c| nominees.iter().position(|&x| x == c))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+
+        for i in start_idx..nominees.len() {
+            let chair = nominees[i];
+            if is_eligible(chair) {
+                actor.set_current(Some(chair));
+                return Some(chair);
+            }
+        }
+
+        actor.set_completed(true);
+        None
     }
 }
 

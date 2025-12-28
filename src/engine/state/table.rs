@@ -1,12 +1,15 @@
 pub mod chair;
 
-use crate::snapshot::{Snapshot, TableData};
+use crate::{
+    engine::turn::Turn,
+    snapshot::{Snapshot, TableData},
+};
 
-use super::{player::Player, role::Role};
+use super::{actor::Actor, player::Player, role::Role};
 use chair::{Chair, ChairError};
 use std::collections::BTreeMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Table {
     seats: BTreeMap<Chair, Player>,
     available_roles: Vec<Role>,
@@ -31,6 +34,40 @@ impl Snapshot for Table {
                 })
                 .collect(),
         }
+    }
+}
+
+impl Turn for Table {
+    fn next_actor<F>(&self, actor: &mut Actor, is_eligible: F) -> Option<Chair>
+    where
+        F: Fn(Chair) -> bool,
+    {
+        if actor.is_completed() {
+            return None;
+        }
+
+        let start_pos = actor
+            .current()
+            .map(|c| c.position() + 1)
+            .unwrap_or(actor.start().position());
+
+        for offset in 0..Self::SEATS {
+            let pos = ((start_pos - 1 + offset) % Self::SEATS) + 1;
+            if let Ok(chair) = self.chair(pos) {
+                if is_eligible(chair) {
+                    if Some(chair) == actor.current() {
+                        actor.set_completed(true);
+                        return None;
+                    }
+
+                    actor.set_current(Some(chair));
+                    return Some(chair);
+                }
+            }
+        }
+
+        actor.set_completed(true);
+        None
     }
 }
 
@@ -100,6 +137,25 @@ impl Table {
     pub fn available_seats(&self) -> &[Chair] {
         &self.available_seats
     }
+
+    pub fn get_sheriff(&self) -> Option<Chair> {
+        for (chair, player) in &self.seats {
+            if player.role() == Some(Role::Sheriff) {
+                return Some(*chair);
+            }
+        }
+        None
+    }
+
+    pub fn get_don(&self) -> Option<Chair> {
+        for (chair, player) in &self.seats {
+            if player.role() == Some(Role::Don) {
+                return Some(*chair);
+            }
+        }
+        None
+    }
+
     // --------------------------------------
     // Player access
     // --------------------------------------

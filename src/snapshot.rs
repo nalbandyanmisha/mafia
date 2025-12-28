@@ -8,7 +8,7 @@ pub trait Snapshot {
 #[derive(Clone, Debug)]
 pub struct PlayerData {
     pub name: String,
-    pub role: Role,
+    pub role: Option<Role>,
     pub warnings: u8,
     pub life_status: String,
 }
@@ -37,8 +37,8 @@ pub struct EngineData {
     pub table: TableData,
     pub phase: Phase,
     pub round: RoundData,
-    pub current_speaker: Option<ChairData>,
     pub current_round: usize,
+    pub actor: Option<ChairData>,
 }
 
 #[derive(Clone, Debug)]

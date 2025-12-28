@@ -3,11 +3,11 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Text},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
 use crate::{
-    domain::phase::{DayPhase, LobbyPhase, Phase},
+    domain::phase::{DayPhase, LobbyPhase, NightPhase, Phase},
     snapshot::{AppData, EngineData},
 };
 
@@ -76,9 +76,17 @@ fn draw_host_main(
         Phase::Day(DayPhase::Discussion) => (
             "DISCUSSION",
             engine_data
-                .current_speaker
+                .actor
                 .clone()
                 .map(|c| format!("🗣️ Chair {}", c.position)),
+        ),
+
+        Phase::Night(NightPhase::RoleAssignment) => (
+            "Reveal Role",
+            engine_data
+                .actor
+                .clone()
+                .map(|c| format!("🎭 Chair {}", c.position)),
         ),
 
         Phase::Night(_) => ("MAFIA ACTING", None),
@@ -97,7 +105,9 @@ fn draw_host_main(
 
     let centered = centered_area(area, text.height() as u16);
 
-    let p = Paragraph::new(text).alignment(Alignment::Center);
+    let p = Paragraph::new(text)
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
 
     frame.render_widget(p, centered);
     Ok(())
