@@ -1,6 +1,7 @@
+use clap::ValueEnum;
 use std::fmt::{self, Display};
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Copy, ValueEnum)]
 pub enum Role {
     #[default]
     Citizen,
