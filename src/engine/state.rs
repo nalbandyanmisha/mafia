@@ -37,7 +37,6 @@ pub struct State {
     pub phase: Phase,
     pub rounds: BTreeMap<RoundId, Round>,
     pub current_round: RoundId,
-    pub current_speaker: Option<Chair>,
     pub actor: Actor,
 }
 
@@ -53,7 +52,6 @@ impl Snapshot for State {
                 .get(&self.current_round)
                 .map_or_else(|| Round::new().snapshot(), |round| round.snapshot()),
             current_round: self.current_round.0,
-            current_speaker: self.current_speaker.map(|c| c.snapshot()),
             actor: self.actor.snapshot(),
         }
     }
@@ -69,7 +67,6 @@ impl State {
             phase: Phase::Lobby(phase::LobbyPhase::Waiting),
             rounds: BTreeMap::new(),
             current_round: RoundId(0),
-            current_speaker: None,
             actor: Actor::new(table.chair(1).unwrap()), // Default actor at chair 1),
         }
     }
@@ -82,16 +79,6 @@ impl State {
 
     pub fn set_phase(&mut self, phase: Phase) {
         self.phase = phase;
-    }
-
-    /* ---------------- Speaker ---------------- */
-
-    pub fn current_speaker(&self) -> Option<Chair> {
-        self.current_speaker
-    }
-
-    pub fn set_current_speaker(&mut self, chair: Option<Chair>) {
-        self.current_speaker = chair;
     }
 
     /* ---------------- Players / Table ---------------- */
@@ -174,7 +161,7 @@ impl State {
     pub fn mark_player_killed(&mut self, chair: Chair) -> Result<(), StateError> {
         let player = self.player_mut(chair)?;
         player.mark_killed();
-        self.current_round_mut().record_night_kill(chair);
+        self.current_round_mut().record_mafia_kill(chair);
         Ok(())
     }
 
@@ -210,7 +197,7 @@ impl State {
         Ok(())
     }
 
-    fn current_round_mut(&mut self) -> &mut Round {
+    pub fn current_round_mut(&mut self) -> &mut Round {
         self.rounds
             .entry(self.current_round)
             .or_insert_with(Round::new)

@@ -50,4 +50,8 @@ impl Actor {
     pub fn set_completed(&mut self, completed: bool) {
         self.completed = completed;
     }
+
+    pub fn set_start(&mut self, chair: Chair) {
+        self.start = chair;
+    }
 }

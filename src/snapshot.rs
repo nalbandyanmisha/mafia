@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::domain::{phase::Phase, role::Role};
 pub trait Snapshot {
     type Output;
@@ -13,7 +15,7 @@ pub struct PlayerData {
     pub life_status: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ChairData {
     pub position: usize,
 }
@@ -30,7 +32,21 @@ pub struct TableData {
 }
 
 #[derive(Clone, Debug)]
-pub struct RoundData;
+pub struct VotingData {
+    pub nominations: HashMap<ChairData, ChairData>,
+    pub nominees: Vec<ChairData>,
+    pub votes: HashMap<ChairData, Vec<ChairData>>, // nominee -> voters
+}
+
+#[derive(Clone, Debug)]
+pub struct RoundData {
+    pub voting: VotingData,
+    pub mafia_kill: Option<ChairData>,
+    pub sheriff_check: Option<ChairData>,
+    pub don_check: Option<ChairData>,
+    pub eliminated: Vec<ChairData>,
+    pub removed: Vec<ChairData>,
+}
 
 #[derive(Clone, Debug)]
 pub struct EngineData {

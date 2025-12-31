@@ -46,24 +46,36 @@ impl Turn for Table {
             return None;
         }
 
+        let start = actor.start();
         let start_pos = actor
             .current()
             .map(|c| c.position() + 1)
-            .unwrap_or(actor.start().position());
+            .unwrap_or(start.position());
 
         for offset in 0..Self::SEATS {
             let pos = ((start_pos - 1 + offset) % Self::SEATS) + 1;
-            if let Ok(chair) = self.chair(pos) {
-                if is_eligible(chair) {
-                    if Some(chair) == actor.current() {
-                        actor.set_completed(true);
-                        return None;
-                    }
 
-                    actor.set_current(Some(chair));
-                    return Some(chair);
-                }
+            let chair = match self.chair(pos) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            if !is_eligible(chair) {
+                continue;
             }
+
+            // 🚨 stop condition: looped back to start
+            if Some(chair) == actor.current() {
+                continue;
+            }
+
+            if Some(chair) == Some(start) && actor.current().is_some() {
+                actor.set_completed(true);
+                return None;
+            }
+
+            actor.set_current(Some(chair));
+            return Some(chair);
         }
 
         actor.set_completed(true);
@@ -138,7 +150,7 @@ impl Table {
         &self.available_seats
     }
 
-    pub fn get_sheriff(&self) -> Option<Chair> {
+    pub fn sheriff(&self) -> Option<Chair> {
         for (chair, player) in &self.seats {
             if player.role() == Some(Role::Sheriff) {
                 return Some(*chair);
@@ -147,7 +159,7 @@ impl Table {
         None
     }
 
-    pub fn get_don(&self) -> Option<Chair> {
+    pub fn don(&self) -> Option<Chair> {
         for (chair, player) in &self.seats {
             if player.role() == Some(Role::Don) {
                 return Some(*chair);

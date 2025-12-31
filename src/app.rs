@@ -94,13 +94,13 @@ impl App {
             }
             Warn { position } => {
                 if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Warn { chair });
+                    let _ = self.engine.apply(EngineCommand::Warn { target: chair });
                     let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
                 }
             }
             Pardon { position } => {
                 if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Pardon { chair });
+                    let _ = self.engine.apply(EngineCommand::Pardon { target: chair });
                     let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
                 }
             }
@@ -110,16 +110,48 @@ impl App {
                     let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
                 }
             }
+            Vote { positions } => {
+                let mut targets = Vec::new();
+                for pos in positions {
+                    if let Ok(chair) = self.engine.chair_from_position(pos) {
+                        targets.push(chair);
+                    }
+                }
+                let _ = self.engine.apply(EngineCommand::Vote { targets });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
             Shoot { position } => {
                 if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Shoot { chair });
+                    let _ = self.engine.apply(EngineCommand::Shoot { target: chair });
                     let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
                 }
             }
-            Next => {
-                let _ = self.engine.apply(EngineCommand::NextPhase);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            Check { position } => {
+                if let Ok(chair) = self.engine.chair_from_position(position) {
+                    let _ = self.engine.apply(EngineCommand::Check { target: chair });
+                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                }
             }
+            Next(subcommand) => match subcommand {
+                commands::NextCommand::Phase => {
+                    let _ = self.engine.apply(EngineCommand::NextPhase);
+                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                }
+                commands::NextCommand::Actor => {
+                    let _ = self.engine.apply(EngineCommand::AdvanceActor);
+                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                }
+            },
+            Assign(subcommand) => match subcommand {
+                commands::AssignCommand::Player { name } => {
+                    let _ = self.engine.apply(EngineCommand::Join { name });
+                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                }
+                commands::AssignCommand::Role { role } => {
+                    let _ = self.engine.apply(EngineCommand::AssignRole);
+                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                }
+            },
         }
     }
 
