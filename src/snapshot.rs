@@ -1,6 +1,6 @@
+use crate::domain::{phase::Phase, position::Position, role::Role, status::Status};
 use std::collections::HashMap;
 
-use crate::domain::{phase::Phase, role::Role};
 pub trait Snapshot {
     type Output;
 
@@ -62,4 +62,35 @@ pub struct AppData {
     pub engine: EngineData,
     pub input: String,
     pub current_timer: Option<u64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Player {
+    pub name: String,
+    pub position: Option<Position>,
+    pub role: Option<Role>,
+    pub warnings: u8,
+    pub status: Status,
+}
+
+#[derive(Clone, Debug)]
+pub struct Voting {
+    pub nominations: HashMap<Position, Position>,
+    pub nominees: Vec<Position>,
+    pub votes: HashMap<Position, Vec<Position>>,
+}
+
+pub struct Round {
+    pub voting: Voting,
+    pub mafia_kill: Option<Position>,
+    pub sheriff_check: Option<Position>,
+    pub don_check: Option<Position>,
+    pub eliminated: Vec<Position>,
+    pub removed: Vec<Position>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Game {
+    pub players: Vec<Player>,
+    pub actor: Option<Position>,
 }

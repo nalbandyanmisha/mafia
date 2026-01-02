@@ -1,6 +1,7 @@
 pub mod commands;
 
 pub mod events;
+pub mod game;
 pub mod state;
 pub mod turn;
 
