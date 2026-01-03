@@ -64,33 +64,36 @@ impl Turn for Game {
             return None;
         }
 
-        let mut players_sorted: Vec<&Player> = self.players.iter().collect();
-        players_sorted.sort_by_key(|p| p.position());
+        let mut players: Vec<Position> = self.players.iter().filter_map(|p| p.position()).collect();
 
-        let start_pos = actor.current().unwrap_or(actor.start());
+        players.sort();
 
-        let mut looped_back = false;
+        let start = actor.start();
 
-        for player in players_sorted.iter() {
-            let pos = match player.position() {
-                Some(p) => p,
-                None => continue, // skip unassigned players
-            };
+        // 🔑 FIRST CALL: no current → start speaks first
+        if actor.current().is_none() && is_eligible(start) {
+            actor.set_current(Some(start));
+            return Some(start);
+        }
 
-            if pos <= start_pos && actor.current().is_some() {
-                looped_back = true;
-            }
+        let current = actor.current().unwrap_or(start);
+        let start_idx = players.iter().position(|&p| p == current)?;
 
-            if !is_eligible(player.position().unwrap()) {
+        for i in 1..=players.len() {
+            let idx = (start_idx + i) % players.len();
+            let pos = players[idx];
+
+            if !is_eligible(pos) {
                 continue;
             }
 
-            actor.set_current(Some(pos));
-
-            if looped_back && Some(pos) == Some(actor.start()) {
+            // 🔒 If we are about to loop back to start → STOP
+            if pos == start && actor.current().is_some() {
                 actor.set_completed(true);
+                return None;
             }
 
+            actor.set_current(Some(pos));
             return Some(pos);
         }
 
