@@ -1,4 +1,4 @@
-use crate::engine::state::table::chair::Chair;
+use crate::domain::position::Position;
 
 #[derive(Debug)]
 pub enum Command {
@@ -8,11 +8,11 @@ pub enum Command {
     AdvanceActor,
     AssignRole,
     RevokeRole,
-    Warn { target: Chair },
-    Pardon { target: Chair },
-    Nominate { target: Chair },
-    Vote { targets: Vec<Chair> },
-    Shoot { target: Chair },
-    Check { target: Chair },
+    Warn { target: Position },
+    Pardon { target: Position },
+    Nominate { target: Position },
+    Vote { targets: Vec<Position> },
+    Shoot { target: Position },
+    Check { target: Position },
     NextPhase,
 }

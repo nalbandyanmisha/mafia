@@ -1,9 +1,9 @@
 pub mod layout;
-pub mod render;
 pub mod widgets;
 
-use crate::snapshot::AppData;
-use crate::tui::widgets::{command, table};
+use crate::domain::phase::Phase;
+use crate::snapshot;
+use crate::tui::widgets::{command, lobby, table};
 
 use ratatui::{
     Frame, Terminal,
@@ -37,9 +37,17 @@ pub fn restore_terminal() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn draw_ui(frame: &mut Frame, app_data: &AppData) {
-    let (table, event_log, command) = layout::draw_layout(frame);
+pub fn draw_ui(frame: &mut Frame, app: &snapshot::App) {
+    let (main, event_log, command) = layout::draw_layout(frame);
 
-    table::draw_table(frame, table, 10, &app_data.engine.table, app_data).unwrap();
-    command::draw_command(frame, &command, &app_data.input).unwrap();
+    match app.engine.game.phase {
+        Phase::Lobby(_) => {
+            lobby::draw_lobby(frame, main, app).unwrap();
+        }
+        _ => {
+            table::draw_table(frame, main, app).unwrap();
+        }
+    }
+
+    command::draw_command(frame, &command, &app.input).unwrap();
 }

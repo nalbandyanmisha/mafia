@@ -1,7 +1,8 @@
 use ratatui::{Frame, layout::Rect};
 
-use crate::snapshot::{AppData, ChairData, SeatData, TableData};
-use crate::tui::widgets::host::draw_host;
+use crate::domain::position::Position;
+use crate::snapshot::{App, Player};
+use crate::tui::widgets::{chair, host};
 
 fn calculate_host_area(table_area: Rect) -> Rect {
     // Calculate host/control panel size
@@ -21,14 +22,14 @@ fn calculate_host_area(table_area: Rect) -> Rect {
 }
 
 /// Compute positions for `n` player cards around a rectangular host
-fn calculate_players_areas(
+fn calculate_chairs_areas(
     table_area: Rect,
     host_area: Rect,
-    n_players: usize,
-    player_area_w: u16,
-    player_area_h: u16,
+    n_chairs: usize,
+    chair_area_w: u16,
+    chair_area_h: u16,
 ) -> Vec<Rect> {
-    let mut areas = Vec::with_capacity(n_players);
+    let mut areas = Vec::with_capacity(n_chairs);
 
     // Center of the host block
     let host_center_x = host_area.x + host_area.width / 2;
@@ -36,13 +37,13 @@ fn calculate_players_areas(
 
     // Circle radius: distance from host center to place cards around
     // We can take the maximum half-dimension + some padding
-    let radius_x = host_area.width / 2 + player_area_w + 2;
-    let radius_y = host_area.height / 2 + player_area_h + 1;
+    let radius_x = host_area.width / 2 + chair_area_w + 2;
+    let radius_y = host_area.height / 2 + chair_area_h + 1;
 
     // Angle increment for n players around host
-    let angle_step = 360.0 / n_players as f64;
+    let angle_step = 360.0 / n_chairs as f64;
 
-    for i in 0..n_players {
+    for i in 0..n_chairs {
         let angle_deg = i as f64 * angle_step;
         let angle_rad = angle_deg.to_radians();
 
@@ -51,22 +52,22 @@ fn calculate_players_areas(
         let cy = host_center_y as f64 + radius_y as f64 * angle_rad.sin();
 
         // Convert center to top-left corner of card
-        let x = (cx - player_area_w as f64 / 2.0).round() as u16;
-        let y = (cy - player_area_h as f64 / 2.0).round() as u16;
+        let x = (cx - chair_area_w as f64 / 2.0).round() as u16;
+        let y = (cy - chair_area_h as f64 / 2.0).round() as u16;
 
         // Clamp to table area
         let x = x
             .max(table_area.x)
-            .min(table_area.x + table_area.width - player_area_w);
+            .min(table_area.x + table_area.width - chair_area_w);
         let y = y
             .max(table_area.y)
-            .min(table_area.y + table_area.height - player_area_h);
+            .min(table_area.y + table_area.height - chair_area_h);
 
         areas.push(Rect {
             x,
             y,
-            width: player_area_w,
-            height: player_area_h,
+            width: chair_area_w,
+            height: chair_area_h,
         });
     }
 
@@ -116,8 +117,8 @@ fn angle_from_host(host: &Rect, player: &Rect) -> f64 {
 
     angle
 }
-fn sort_player_areas_clockwise(host: &Rect, players: &mut [Rect]) {
-    players.sort_by(|a, b| {
+fn sort_chairs_areas_clockwise(host: &Rect, chairs: &mut [Rect]) {
+    chairs.sort_by(|a, b| {
         angle_from_host(host, a)
             .partial_cmp(&angle_from_host(host, b))
             .unwrap()
@@ -126,36 +127,25 @@ fn sort_player_areas_clockwise(host: &Rect, players: &mut [Rect]) {
 
 fn draw_chairs_around_host(
     frame: &mut Frame,
-    players_areas: &[Rect],
-    seats: &[SeatData],
-    actor: &Option<ChairData>,
+    chairs_areas: &[Rect],
+    app: &App,
 ) -> Result<(), anyhow::Error> {
-    for (i, area) in players_areas.iter().enumerate() {
-        crate::tui::widgets::chair::draw_chair(frame, *area, &seats[i].clone(), actor)?;
+    for (i, area) in chairs_areas.iter().enumerate() {
+        chair::draw_chair(frame, *area, &app.engine.game.players[i], &app.engine.actor)?;
     }
     Ok(())
 }
 
-pub fn draw_table(
-    frame: &mut Frame,
-    table_area: Rect,
-    n_players: usize,
-    table: &TableData,
-    app_data: &AppData,
-) -> Result<(), anyhow::Error> {
-    let player_area_w = table_area.width / 6;
-    let player_area_h = table_area.height / 6;
+pub fn draw_table(frame: &mut Frame, table_area: Rect, app: &App) -> Result<(), anyhow::Error> {
+    let n_chairs = 10;
+    let chair_area_w = table_area.width / 6;
+    let chair_area_h = table_area.height / 6;
     let host_area = calculate_host_area(table_area);
-    let mut players_areas = calculate_players_areas(
-        table_area,
-        host_area,
-        n_players,
-        player_area_w,
-        player_area_h,
-    );
-    sort_player_areas_clockwise(&host_area, &mut players_areas);
-    players_areas.rotate_right(6); // Adjust so player 1 is at bottom-left
-    draw_host(frame, host_area, app_data)?;
-    draw_chairs_around_host(frame, &players_areas, &table.seats, &app_data.engine.actor).unwrap();
+    let mut chairs_areas =
+        calculate_chairs_areas(table_area, host_area, n_chairs, chair_area_w, chair_area_h);
+    sort_chairs_areas_clockwise(&host_area, &mut chairs_areas);
+    chairs_areas.rotate_right(6); // Adjust so player 1 is at bottom-left
+    host::draw_host(frame, host_area, app)?;
+    draw_chairs_around_host(frame, &chairs_areas, app).unwrap();
     Ok(())
 }

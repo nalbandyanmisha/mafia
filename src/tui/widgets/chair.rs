@@ -6,7 +6,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
-use crate::snapshot::{ChairData, PlayerData, SeatData};
+use crate::{
+    domain::{position::Position, status::Status},
+    snapshot::Player,
+};
 
 enum Visual {
     Empty,      // no player
@@ -32,8 +35,11 @@ fn centered_area(area: Rect, height: u16) -> Rect {
     vertical[1]
 }
 
-fn build_chair_frame(visual: &Visual, chair: &ChairData) -> Result<Block<'static>, anyhow::Error> {
-    let position = chair.position;
+fn build_chair_frame(
+    visual: &Visual,
+    position: &Position,
+) -> Result<Block<'static>, anyhow::Error> {
+    let position = position.value();
     let (style, title) = match visual {
         Visual::Empty => (
             Style::default()
@@ -84,9 +90,9 @@ fn build_chair_frame(visual: &Visual, chair: &ChairData) -> Result<Block<'static
     Ok(block)
 }
 
-fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>, anyhow::Error> {
-    match player {
-        Some(player) => {
+fn build_chair_content(player: &Player) -> Result<Paragraph<'static>, anyhow::Error> {
+    match player.status {
+        Status::Alive => {
             let role = if let Some(r) = player.role {
                 format!("{r:?}",)
             } else {
@@ -111,7 +117,7 @@ fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>,
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true }))
         }
-        None => Ok(Paragraph::new("Empty Seat")
+        _ => Ok(Paragraph::new("Empty Seat, Player is not alive")
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true })),
     }
@@ -120,29 +126,26 @@ fn build_chair_content(player: Option<PlayerData>) -> Result<Paragraph<'static>,
 pub fn draw_chair(
     frame: &mut Frame,
     area: Rect,
-    seat: &SeatData,
-    actor: &Option<ChairData>,
+    player: &Player,
+    actor: &Option<Position>,
 ) -> Result<(), anyhow::Error> {
-    let mut visual = match &seat.player {
-        Some(player) => match player.life_status.as_str() {
-            "alive" => Visual::Alive,
-            "dead" => Visual::Dead,
-            "eliminated" => Visual::Eliminated,
-            "removed" => Visual::Removed,
-            "speaking" => Visual::Speaking,
-            "muted" => Visual::Muted,
-            "candidate" => Visual::Candidate,
-            _ => Visual::Empty,
-        },
-        None => Visual::Empty,
+    let mut visual = if player.position == *actor {
+        Visual::Speaking
+    } else {
+        match player.status {
+            Status::Alive => Visual::Alive,
+            Status::Dead => Visual::Dead,
+            Status::Removed => Visual::Removed,
+            Status::Eliminated => Visual::Eliminated,
+        }
     };
 
-    if actor.is_some() && actor.as_ref().unwrap().position == seat.chair.position {
-        visual = Visual::Speaking;
+    if player.is_silenced {
+        visual = Visual::Muted;
     }
 
-    let chair_frame = build_chair_frame(&visual, &seat.chair)?;
-    let chair_content = build_chair_content(seat.player.clone())?;
+    let chair_frame = build_chair_frame(&visual, &player.position.unwrap())?;
+    let chair_content = build_chair_content(&player.clone())?;
 
     let centered_area = centered_area(chair_frame.inner(area), 2);
 

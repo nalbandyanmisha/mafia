@@ -8,22 +8,18 @@ use ratatui::{
 
 use crate::{
     domain::phase::{CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, VotingPhase},
-    snapshot::{AppData, EngineData},
+    snapshot::{App, Engine, Game},
 };
 
-pub fn draw_host(
-    frame: &mut Frame,
-    host_area: Rect,
-    host_data: &AppData,
-) -> Result<(), anyhow::Error> {
-    let (text, style) = match host_data.engine.phase {
+pub fn draw_host(frame: &mut Frame, host_area: Rect, host_data: &App) -> Result<(), anyhow::Error> {
+    let (text, style) = match host_data.engine.game.phase {
         Phase::Lobby(_) => ("Lobby".to_string(), Style::default().fg(Color::Gray)),
         Phase::Day(_) => (
-            format!("Day ·  {}", host_data.engine.current_round),
+            format!("Day ·  {}", host_data.engine.game.current_round),
             Style::default().fg(Color::Yellow),
         ),
         Phase::Night(_) => (
-            format!("Night ·  {}", host_data.engine.current_round),
+            format!("Night ·  {}", host_data.engine.game.current_round),
             Style::default().fg(Color::Magenta),
         ),
     };
@@ -45,7 +41,7 @@ pub fn draw_host(
     ])
     .split(inner);
 
-    draw_host_header(frame, sections[1], &host_data.engine)?;
+    draw_host_header(frame, sections[1], &host_data.engine.game)?;
     draw_host_main(frame, sections[2], &host_data.engine)?;
     draw_host_footer(frame, sections[3], host_data)?;
 
@@ -55,7 +51,7 @@ pub fn draw_host(
 fn draw_host_header(
     frame: &mut Frame,
     area: Rect,
-    engine_data: &EngineData,
+    engine_data: &Game,
 ) -> Result<(), anyhow::Error> {
     let (text, style) = match engine_data.phase {
         Phase::Lobby(LobbyPhase::Waiting) => ("Waiting", Style::default().fg(Color::Gray)),
@@ -94,25 +90,26 @@ fn draw_host_header(
 fn draw_host_main(
     frame: &mut Frame,
     area: Rect,
-    engine_data: &EngineData,
+    engine_data: &Engine,
 ) -> Result<(), anyhow::Error> {
-    let (title, subtitle) = match engine_data.phase {
+    let (title, subtitle) = match engine_data.game.phase {
         Phase::Lobby(LobbyPhase::Waiting) => ("WAITING", None),
         Phase::Lobby(LobbyPhase::Ready) => ("Ready", None),
 
         Phase::Day(DayPhase::Morning) => ("MORNING", None),
         Phase::Day(DayPhase::Discussion) => (
             "DISCUSSION",
-            engine_data.actor.clone().map(|c| {
+            engine_data.actor.map(|c| {
                 format!(
                     "Player at {}🪑 is 🗣️ and 🎯{}",
-                    c.position,
+                    c.value(),
                     engine_data
+                        .game
                         .round
                         .voting
                         .nominations
                         .get(&c)
-                        .map_or(0, |n| n.position)
+                        .map_or(0, |n| n.value())
                 )
             }),
         ),
@@ -121,11 +118,12 @@ fn draw_host_main(
             format!(
                 "Nominated: {}",
                 engine_data
+                    .game
                     .round
                     .voting
                     .nominees
                     .iter()
-                    .map(|c| format!("🪑{}", c.position))
+                    .map(|c| format!("🪑{}", c.value()))
                     .collect::<Vec<_>>()
                     .join(", ")
             )
@@ -134,14 +132,14 @@ fn draw_host_main(
 
         Phase::Day(DayPhase::Voting(VotingPhase::VoteCast)) => (
             "Cast Your Vote",
-            engine_data.actor.clone().map(|c| {
+            engine_data.actor.map(|c| {
                 format!(
                     "Player at {}🪑 was voted by {:?}",
-                    c.position,
-                    engine_data.round.voting.votes.get(&c).map(|voters| {
+                    c.value(),
+                    engine_data.game.round.voting.votes.get(&c).map(|voters| {
                         voters
                             .iter()
-                            .map(|v| format!("🪑{}", v.position))
+                            .map(|v| format!("🪑{}", v.value()))
                             .collect::<Vec<_>>()
                             .join(", ")
                     })
@@ -151,37 +149,34 @@ fn draw_host_main(
 
         Phase::Night(NightPhase::RoleAssignment) => (
             "Reveal Role",
-            engine_data
-                .actor
-                .clone()
-                .map(|c| format!("🎭 Chair {}", c.position)),
+            engine_data.actor.map(|c| format!("🎭 Chair {}", c.value())),
         ),
 
         Phase::Night(NightPhase::MafiaShoot) => (
             "MAFIA IS SHOOTING",
             engine_data
+                .game
                 .round
                 .mafia_kill
-                .clone()
-                .map(|c| format!("🎯 Chair {}", c.position)),
+                .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 
         Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => (
             "SHERIFF IS CHECKING",
             engine_data
+                .game
                 .round
                 .sheriff_check
-                .clone()
-                .map(|c| format!("🎯 Chair {}", c.position)),
+                .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 
         Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => (
             "DON IS CHECKING",
             engine_data
+                .game
                 .round
                 .don_check
-                .clone()
-                .map(|c| format!("🎯 Chair {}", c.position)),
+                .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 
         _ => ("", None),
@@ -217,11 +212,7 @@ fn centered_area(area: Rect, height: u16) -> Rect {
     vertical[1]
 }
 
-fn draw_host_footer(
-    frame: &mut Frame,
-    area: Rect,
-    app_data: &AppData,
-) -> Result<(), anyhow::Error> {
+fn draw_host_footer(frame: &mut Frame, area: Rect, app_data: &App) -> Result<(), anyhow::Error> {
     let text = match app_data.current_timer {
         Some(sec) => format!("⏳ {:02}:{:02}", sec / 60, sec % 60),
         None => "NO TIMER".to_string(),

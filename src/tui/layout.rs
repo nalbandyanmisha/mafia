@@ -8,23 +8,23 @@ use ratatui::{
 pub fn draw_layout(frame: &mut Frame) -> (Rect, Rect, Rect) {
     let screen = frame.area();
 
-    // 1️⃣ Split screen: left (table+command) | right (event log)
+    // 1️⃣ Split screen: left (main+command) | right (event log)
     let [left, event_log] =
         Layout::horizontal([Constraint::Percentage(75), Constraint::Percentage(25)]).areas(screen);
 
-    // 2️⃣ Split left side: table | command palette
-    let [table, command] =
+    // 2️⃣ Split left side: main | command palette
+    let [main, command] =
         Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).areas(left);
 
     // 3️⃣ Render blocks
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" TABLE ")
-            .style(Style::default().fg(Color::Green)),
-        table,
-    );
+    // MAIN block
+    let main_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" MAIN ")
+        .style(Style::default().fg(Color::Green));
 
+    let main_inner = main_block.inner(main);
+    frame.render_widget(main_block, main);
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
@@ -41,5 +41,5 @@ pub fn draw_layout(frame: &mut Frame) -> (Rect, Rect, Rect) {
         event_log,
     );
 
-    (table, event_log, command)
+    (main_inner, event_log, command)
 }

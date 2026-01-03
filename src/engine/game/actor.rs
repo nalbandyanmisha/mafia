@@ -25,7 +25,8 @@ impl Actor {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, start: Position) {
+        self.start = start;
         self.current = None;
         self.completed = false;
     }

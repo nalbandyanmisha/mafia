@@ -1,52 +1,49 @@
-use crate::domain::phase::Phase;
-use crate::engine::state::table::chair::Chair;
+use crate::domain::{phase::Phase, position::Position, role::Role};
 
 #[derive(Debug)]
 pub enum Event {
     PlayerJoined {
-        player: String,
-        chair: Chair,
+        name: String,
     },
     PlayerLeft {
-        player: String,
-        chair: Chair,
+        name: String,
     },
     GameStarted,
     TurnCompleted,
     ActorAdvanced {
-        chair: Chair,
+        chair: Position,
     },
     PlayerWarned {
-        target: Chair,
+        target: Position,
         warnings: u8,
     },
     PlayerPardoned {
-        target: Chair,
+        target: Position,
         warnings: u8,
     },
     PlayerNominated {
-        by: Chair,
-        target: Chair,
+        by: Position,
+        target: Position,
     },
     PlayerKilled {
-        target: Chair,
+        target: Position,
     },
     CheckPerformed {
-        by: Chair,
-        target: Chair,
-        role_revealed: Option<String>,
+        by: Position,
+        target: Position,
+        role_revealed: Option<Role>,
     },
     PlayerEliminated {
-        target: Chair,
+        target: Position,
     },
     PlayerRemoved {
-        target: Chair,
+        target: Position,
     },
     PhaseAdvanced {
         phase: Phase,
     },
     NextSpeaker {
-        chair: Chair,
+        chair: Position,
     },
     EndDay,
 }

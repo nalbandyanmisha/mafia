@@ -2,30 +2,47 @@ pub mod commands;
 
 pub mod events;
 pub mod game;
-pub mod state;
-pub mod turn;
 
 use self::{
     commands::Command,
     events::Event,
-    state::{State, player::Player, round::RoundId, table::Table, table::chair::Chair},
+    game::{Game, actor::Actor, round::RoundId, turn::Turn},
 };
-use crate::domain::phase::{
-    CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, PhaseKind, TurnContext, VotingPhase,
+use crate::{
+    domain::{
+        phase::{
+            CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, PhaseKind, TurnContext,
+            VotingPhase,
+        },
+        position::Position,
+    },
+    snapshot::{self, Snapshot},
 };
 use anyhow::{Result, bail};
 use rand::prelude::*;
-use turn::Turn;
 
 #[derive(Debug)]
 pub struct Engine {
-    pub state: State,
+    pub game: Game,
+    pub actor: Actor,
+}
+
+impl Snapshot for Engine {
+    type Output = snapshot::Engine;
+
+    fn snapshot(&self) -> Self::Output {
+        snapshot::Engine {
+            game: self.game.snapshot(),
+            actor: self.actor.snapshot(),
+        }
+    }
 }
 
 impl Engine {
     pub fn new() -> Self {
         Engine {
-            state: State::new(),
+            game: Game::new(),
+            actor: Actor::new(Position::new(1)),
         }
     }
     pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
@@ -33,8 +50,8 @@ impl Engine {
             Command::Join { name } => self.join(&name),
             Command::Leave { name } => self.leave(&name),
             Command::Start => self.start(),
-            Command::AssignRole => self.assign_role(self.state.actor.current().unwrap()),
-            Command::RevokeRole => self.revoke_role(self.state.actor.current().unwrap()),
+            Command::AssignRole => self.assign_role(self.actor.current().unwrap()),
+            Command::RevokeRole => self.revoke_role(self.actor.current().unwrap()),
             Command::AdvanceActor => self.advance_actor(),
             Command::NextPhase => self.advance_phase(),
             Command::Warn { target } => self.warn(target),
@@ -46,129 +63,165 @@ impl Engine {
         }
     }
 
-    pub fn chair_from_position(&self, position: u8) -> anyhow::Result<Chair> {
-        self.state
-            .table
-            .chair(position)
-            .map_err(|e| anyhow::anyhow!("Invalid chair: {e}"))
-    }
     // ------------------------------
     // Join / Leave
     // ------------------------------
-    fn join(&mut self, name: &str) -> Result<Vec<Event>> {
+    fn join(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_phase(PhaseKind::Lobby)?;
 
-        // Pick random seat
-        let chair = *self
-            .state
-            .available_seats()
-            .choose(&mut rand::rng())
-            .ok_or_else(|| anyhow::anyhow!("No available seats"))?;
-        self.state.take_seat(chair)?;
-
-        self.state
-            .assign_player(chair, Player::new(name.to_string()))?;
+        self.game.add_player(name);
+        self.assign_position(name)?;
 
         self.advance_phase()?;
 
         Ok(vec![Event::PlayerJoined {
-            player: name.to_string(),
-            chair,
+            name: name.to_string(),
         }])
     }
 
     fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Lobby)?;
-        let chair = self
-            .state
-            .chair_of_player(name)
-            .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
-
-        self.state.return_seat(chair);
-        self.state.remove_player(chair)?;
+        self.revoke_position(name)?;
+        self.game.remove_player(name);
 
         self.advance_phase()?;
 
         Ok(vec![Event::PlayerLeft {
-            player: name.to_string(),
-            chair,
+            name: name.to_string(),
         }])
+    }
+
+    fn assign_position(&mut self, name: &str) -> Result<Vec<Event>> {
+        self.ensure_phase(PhaseKind::Lobby)?;
+
+        // Pick random seat
+        let position = *self
+            .game
+            .available_positions()
+            .choose(&mut rand::rng())
+            .ok_or_else(|| anyhow::anyhow!("No available positions"))?;
+        self.game.take_position(position)?;
+
+        let player = self
+            .game
+            .player_by_name_mut(name)
+            .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
+        player.assign_position(position);
+
+        Ok(vec![])
+    }
+
+    fn revoke_position(&mut self, name: &str) -> Result<Vec<Event>> {
+        self.ensure_phase(PhaseKind::Lobby)?;
+
+        let position = self
+            .game
+            .player_by_name(name)
+            .ok_or_else(|| anyhow::anyhow!("Player not found"))?
+            .position()
+            .ok_or_else(|| anyhow::anyhow!("Player {} does not have an assigned position", name))?;
+        let player = self
+            .game
+            .player_by_name_mut(name)
+            .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
+        player.clear_position();
+
+        self.game.return_position(position);
+        Ok(vec![])
     }
 
     fn start(&mut self) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Lobby)?;
 
-        self.state
+        self.game
+            .players_mut()
+            .sort_by_key(|p| p.position().map(|pos| pos.value()));
+        self.game
             .set_phase(Phase::Night(NightPhase::RoleAssignment));
-        self.state.current_round = RoundId(0);
-        self.state.rounds.insert(RoundId(0), Default::default());
+        self.game.current_round = RoundId(0);
+        self.game.rounds.insert(RoundId(0), Default::default());
+        self.actor.set_start(self.first_speaker_of_day());
 
         Ok(vec![Event::GameStarted])
     }
 
-    fn assign_role(&mut self, chair: Chair) -> Result<Vec<Event>> {
+    fn assign_role(&mut self, position: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Night)?;
-        if self.state.player(chair)?.role().is_some() {
+
+        if self
+            .game
+            .player_by_position(position)
+            .unwrap()
+            .role()
+            .is_some()
+        {
             return Ok(vec![]); // already has role
         }
         // Pick random role
         let role = *self
-            .state
+            .game
             .available_roles()
             .choose(&mut rand::rng())
             .ok_or_else(|| anyhow::anyhow!("No available roles"))?;
-        self.state.take_role(role)?;
+        self.game.take_role(role)?;
 
-        let player = self.state.player_mut(chair)?;
-        player.set_role(Some(role));
+        let player = self.game.player_by_position_mut(position).unwrap();
+        player.assign_role(role);
         Ok(vec![])
     }
 
-    fn revoke_role(&mut self, chair: Chair) -> Result<Vec<Event>> {
+    fn revoke_role(&mut self, position: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Night)?;
 
-        let player = self.state.player(chair)?.clone();
-        self.state.return_role(player.role().unwrap());
+        let player = self.game.player_by_position(position).unwrap();
+        self.game.return_role(player.role().unwrap());
 
-        let player = self.state.player_mut(chair)?;
-        player.set_role(None);
+        let player = self.game.player_by_position_mut(position).unwrap();
+        player.clear_role();
         Ok(vec![])
     }
 
     // ------------------------------
     // Player actions
     // ------------------------------
-    fn warn(&mut self, target: Chair) -> Result<Vec<Event>> {
+    fn warn(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_alive(target)?;
-        let warnings = self.state.increment_player_warning(target)?;
+        let player = self.game.player_by_position_mut(target).unwrap();
+        player.add_warning()?;
+        let warnings = player.warnings();
+
         Ok(vec![Event::PlayerWarned { target, warnings }])
     }
 
-    fn pardon(&mut self, target: Chair) -> Result<Vec<Event>> {
-        let warnings = self.state.deincrement_player_warning(target)?;
+    fn pardon(&mut self, target: Position) -> Result<Vec<Event>> {
+        self.ensure_alive(target)?;
+        let player = self.game.player_by_position_mut(target).unwrap();
+        player.remove_warning()?;
+        let warnings = player.warnings();
         Ok(vec![Event::PlayerPardoned { target, warnings }])
     }
 
-    fn shoot(&mut self, target: Chair) -> Result<Vec<Event>> {
+    fn shoot(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_alive(target)?;
-        self.state.mark_player_killed(target)?;
+        let player = self.game.player_by_position_mut(target).unwrap();
+        player.mark_dead();
         Ok(vec![Event::PlayerKilled { target }])
     }
 
-    fn check(&mut self, target: Chair) -> Result<Vec<Event>> {
+    fn check(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Night)?;
-        match self.state.phase() {
+        match self.game.phase() {
             Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => {
-                let by = self.state.table.sheriff();
-                self.ensure_alive(by.unwrap())?;
+                let by = self.game.sheriff();
+                self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.state.current_round_mut().record_sheriff_check(target);
+                self.game.current_round_mut().record_sheriff_check(target);
             }
             Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => {
-                let by = self.state.table.don();
-                self.ensure_alive(by.unwrap())?;
+                let by = self.game.don();
+                self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.state.current_round_mut().record_don_check(target);
+                self.game.current_round_mut().record_don_check(target);
             }
             _ => bail!("Not in investigation phase"),
         };
@@ -176,25 +229,23 @@ impl Engine {
         Ok(vec![])
     }
 
-    fn nominate(&mut self, target: Chair) -> Result<Vec<Event>> {
+    fn nominate(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Day)?;
         let by = self
-            .state
             .actor
             .current()
             .ok_or_else(|| anyhow::anyhow!("No active speaker"))?;
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
 
-        self.state.add_nomination(by, target)?;
+        self.game.add_nomination(by, target)?;
         Ok(vec![Event::PlayerNominated { by, target }])
     }
 
-    fn vote(&mut self, targets: Vec<Chair>) -> Result<Vec<Event>> {
+    fn vote(&mut self, targets: Vec<Position>) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Day)?;
 
         let by = self
-            .state
             .actor
             .current()
             .ok_or_else(|| anyhow::anyhow!("No active speaker"))?;
@@ -202,7 +253,7 @@ impl Engine {
 
         for &target in &targets {
             self.ensure_alive(target)?;
-            self.state.add_vote(by, target)?;
+            self.game.add_vote(by, target)?;
         }
 
         Ok(vec![])
@@ -214,7 +265,7 @@ impl Engine {
         use Phase::*;
         use VotingPhase::*;
 
-        match self.state.phase() {
+        match self.game.phase() {
             Night(RoleAssignment) => Some(TurnContext::RoleAssignment),
             Day(Discussion) => Some(TurnContext::DayDiscussion),
             Day(Voting(TieDiscussion)) => Some(TurnContext::VotingDiscussion),
@@ -231,34 +282,27 @@ impl Engine {
         };
 
         let next = match ctx {
-            TurnContext::RoleAssignment => {
-                self.state.table.next_actor(&mut self.state.actor, |chair| {
-                    self.state
-                        .table
-                        .get_player(&chair)
-                        .map(|p| p.role().is_none())
-                        .unwrap_or(false)
-                })
-            }
+            TurnContext::RoleAssignment => self.game.next_actor(&mut self.actor, |position| {
+                self.game
+                    .player_by_position(position)
+                    .map(|p| p.role().is_none())
+                    .unwrap_or(false)
+            }),
 
-            TurnContext::DayDiscussion => {
-                self.state.actor.set_start(self.first_speaker_of_day());
-                self.state.table.next_actor(&mut self.state.actor, |chair| {
-                    self.state
-                        .table
-                        .get_player(&chair)
-                        .map(|p| p.is_alive())
-                        .unwrap_or(false)
-                })
-            }
+            TurnContext::DayDiscussion => self.game.next_actor(&mut self.actor, |position| {
+                self.game
+                    .player_by_position(position)
+                    .map(|p| p.is_alive())
+                    .unwrap_or(false)
+            }),
 
             TurnContext::VoteCasting => {
-                let round = self.state.current_round_mut();
+                let round = self.game.current_round_mut();
                 round
                     .voting
                     .clone()
                     .unwrap()
-                    .next_actor(&mut self.state.actor, |_| true)
+                    .next_actor(&mut self.actor, |_| true)
             }
 
             TurnContext::VotingDiscussion => {
@@ -274,7 +318,7 @@ impl Engine {
         match next {
             Some(chair) => Ok(vec![Event::ActorAdvanced { chair }]),
             None => {
-                self.state.actor.set_completed(true);
+                self.actor.set_completed(true);
                 Ok(vec![Event::TurnCompleted])
             }
         }
@@ -288,27 +332,28 @@ impl Engine {
         use Phase::*;
         use VotingPhase::*;
 
-        match self.state.phase() {
+        match self.game.phase() {
             // -------- Lobby --------
             Lobby(Waiting) => {
-                if self.state.available_seats().is_empty() {
+                if self.game.available_positions().is_empty() {
                     Lobby(Ready)
                 } else {
                     Lobby(Waiting)
                 }
             }
             Lobby(Ready) => {
-                if !self.state.available_seats().is_empty() {
+                if !self.game.available_positions().is_empty() {
                     Lobby(Waiting)
                 } else {
-                    Night(RoleAssignment)
+                    Lobby(Ready)
                 }
-                // To advance from this point host should issue NextPhase command
+                // To advance from this point host should issue start command
             }
 
             // -------- Night --------
             Night(RoleAssignment) => {
-                if self.state.actor.is_completed() {
+                if self.actor.is_completed() {
+                    self.actor.reset(self.first_speaker_of_day());
                     Night(SheriffReveal)
                 } else {
                     Night(RoleAssignment)
@@ -316,8 +361,8 @@ impl Engine {
             }
             Night(SheriffReveal) => Night(MafiaBriefing),
             Night(MafiaBriefing) => {
-                if self.state.current_round == RoundId(0) {
-                    Day(Morning)
+                if self.game.current_round == RoundId(0) {
+                    Day(Discussion)
                 } else {
                     Night(Investigation(Sheriff))
                 }
@@ -327,7 +372,10 @@ impl Engine {
             Night(Investigation(Don)) => Day(Morning),
 
             // -------- Day --------
-            Day(Morning) => Day(Discussion),
+            Day(Morning) => {
+                self.actor.set_start(self.first_speaker_of_day());
+                Day(Discussion)
+            }
             Day(Discussion) => Day(Voting(Nomination)),
 
             // -------- Voting --------
@@ -337,7 +385,7 @@ impl Engine {
                 TieDiscussion => Day(Voting(TieRevote)),
                 TieRevote => Day(Voting(Resolution)),
                 Resolution => {
-                    self.state.start_new_round();
+                    self.game.start_new_round();
                     Night(MafiaShoot)
                 }
             },
@@ -347,35 +395,37 @@ impl Engine {
     fn advance_phase(&mut self) -> Result<Vec<Event>> {
         let next = self.next_phase();
 
-        self.state.set_phase(next);
-        self.state.actor.reset();
+        self.game.set_phase(next);
+        self.actor.reset(self.first_speaker_of_day());
 
         Ok(vec![Event::PhaseAdvanced { phase: next }])
     }
 
-    fn first_speaker_of_day(&self) -> Chair {
-        self.chair_from_position((self.state.current_round.0 % Table::SEATS as usize) as u8 + 1)
-            .unwrap()
+    fn first_speaker_of_day(&self) -> Position {
+        ((self.game.current_round.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
     }
 
     // ------------------------------
     // Guards
     // ------------------------------
     fn ensure_phase(&self, expected: PhaseKind) -> Result<()> {
-        let actual = self.state.phase().kind();
+        let actual = self.game.phase().kind();
         if actual != expected {
             bail!(
                 "Wrong phase. Expected {expected:?}, got {:?}",
-                self.state.phase()
+                self.game.phase()
             );
         }
         Ok(())
     }
 
-    fn ensure_alive(&self, chair: Chair) -> Result<()> {
-        let player = self.state.player(chair)?;
+    fn ensure_alive(&self, position: Position) -> Result<()> {
+        let player = self
+            .game
+            .player_by_position(position)
+            .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
         if !player.is_alive() {
-            bail!("Player {chair:?} is not alive");
+            bail!("Player {position:?} is not alive");
         }
         Ok(())
     }
@@ -396,9 +446,9 @@ pub enum EngineError {
     #[error("Wrong phase. Expected {expected:?}, got {current:?}")]
     WrongPhase { expected: Phase, current: Phase },
     #[error("Player {0:?} is dead")]
-    PlayerDead(Chair),
+    PlayerDead(Position),
     #[error("No active speaker")]
     NoActiveSpeaker,
     #[error("Player at chair {0:?} has already nominated this round")]
-    AlreadyNominated(Chair),
+    AlreadyNominated(Position),
 }

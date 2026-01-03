@@ -35,9 +35,8 @@ pub struct Game {
     phase: Phase,
     pub rounds: BTreeMap<RoundId, Round>,
     pub current_round: RoundId,
-    pub actor: Actor,
-    available_roles: Vec<Role>,
-    available_positions: Vec<Position>,
+    roles_pool: Vec<Role>,
+    positions_pool: Vec<Position>,
 }
 
 impl Snapshot for Game {
@@ -46,7 +45,12 @@ impl Snapshot for Game {
     fn snapshot(&self) -> Self::Output {
         snapshot::Game {
             players: self.players.iter().map(|p| p.snapshot()).collect(),
-            actor: self.actor.snapshot(),
+            phase: self.phase,
+            round: self
+                .rounds
+                .get(&self.current_round)
+                .map_or_else(|| Round::new().snapshot(), |round| round.snapshot()),
+            current_round: self.current_round.0,
         }
     }
 }
@@ -56,14 +60,14 @@ impl Turn for Game {
     where
         F: Fn(Position) -> bool,
     {
-        if self.actor.is_completed() {
+        if actor.is_completed() {
             return None;
         }
 
         let mut players_sorted: Vec<&Player> = self.players.iter().collect();
         players_sorted.sort_by_key(|p| p.position());
 
-        let start_pos = actor.current().unwrap_or(self.actor.start());
+        let start_pos = actor.current().unwrap_or(actor.start());
 
         let mut looped_back = false;
 
@@ -73,15 +77,11 @@ impl Turn for Game {
                 None => continue, // skip unassigned players
             };
 
-            if pos <= start_pos && self.actor.current().is_some() {
+            if pos <= start_pos && actor.current().is_some() {
                 looped_back = true;
             }
 
             if !is_eligible(player.position().unwrap()) {
-                continue;
-            }
-
-            if pos == actor.current().unwrap() {
                 continue;
             }
 
@@ -103,14 +103,14 @@ impl Game {
     pub const PLAYER_COUNT: u8 = 10;
 
     pub fn new() -> Self {
-        let mut available_positions = Vec::new();
+        let mut positions_pool = Vec::new();
         let players = Vec::with_capacity(Self::PLAYER_COUNT as usize);
 
         for pos in 1..=Self::PLAYER_COUNT {
-            available_positions.push(Position::new(pos));
+            positions_pool.push(Position::new(pos));
         }
 
-        let available_roles = vec![
+        let roles_pool = vec![
             Role::Don,
             Role::Mafia,
             Role::Mafia,
@@ -125,12 +125,11 @@ impl Game {
 
         Self {
             players,
-            available_positions,
-            available_roles,
+            roles_pool,
+            positions_pool,
             phase: Phase::Lobby(phase::LobbyPhase::Waiting),
             rounds: BTreeMap::new(),
             current_round: RoundId(0),
-            actor: Actor::new(Position::new(1)),
         }
     }
 
@@ -238,8 +237,8 @@ impl Game {
     // ---------------- Roles ----------------
     /// Assign a role, removing it from available roles
     pub fn take_role(&mut self, role: Role) -> Result<(), Error> {
-        if let Some(pos) = self.available_roles.iter().position(|r| *r == role) {
-            self.available_roles.remove(pos);
+        if let Some(pos) = self.roles_pool.iter().position(|r| *r == role) {
+            self.roles_pool.remove(pos);
             Ok(())
         } else {
             Err(Error::NoAvailableRoles)
@@ -248,17 +247,17 @@ impl Game {
 
     /// Return a role to the pool
     pub fn return_role(&mut self, role: Role) {
-        self.available_roles.push(role);
+        self.roles_pool.push(role);
     }
 
     pub fn available_roles(&self) -> &[Role] {
-        &self.available_roles
+        &self.roles_pool
     }
 
     // ---------------- Positions ----------------
     pub fn take_position(&mut self, position: Position) -> Result<(), Error> {
-        if let Some(pos) = self.available_positions.iter().position(|c| *c == position) {
-            self.available_positions.remove(pos);
+        if let Some(pos) = self.positions_pool.iter().position(|c| *c == position) {
+            self.positions_pool.remove(pos);
             Ok(())
         } else {
             Err(Error::NoAvailablePositions)
@@ -266,12 +265,12 @@ impl Game {
     }
 
     pub fn return_position(&mut self, position: Position) {
-        if !self.available_positions.contains(&position) {
-            self.available_positions.push(position);
+        if !self.positions_pool.contains(&position) {
+            self.positions_pool.push(position);
         }
     }
 
     pub fn available_positions(&self) -> &[Position] {
-        &self.available_positions
+        &self.positions_pool
     }
 }

@@ -4,7 +4,7 @@ pub mod parser;
 
 use crate::app::{commands::Command as AppCommand, events::Event as AppEvent};
 use crate::engine::{Engine, commands::Command as EngineCommand};
-use crate::snapshot::{AppData, Snapshot};
+use crate::snapshot::{self, Snapshot};
 use clap::Parser;
 use tokio::sync::mpsc;
 
@@ -24,11 +24,11 @@ pub struct App {
 }
 
 impl Snapshot for App {
-    type Output = AppData;
+    type Output = snapshot::App;
 
     fn snapshot(&self) -> Self::Output {
-        AppData {
-            engine: self.engine.state.snapshot(),
+        snapshot::App {
+            engine: self.engine.snapshot(),
             input: self.input.clone(),
             current_timer: self.current_timer,
         }
@@ -93,44 +93,42 @@ impl App {
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Warn { position } => {
-                if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Warn { target: chair });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
+                let _ = self.engine.apply(EngineCommand::Warn {
+                    target: position.into(),
+                });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Pardon { position } => {
-                if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Pardon { target: chair });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
+                let _ = self.engine.apply(EngineCommand::Pardon {
+                    target: position.into(),
+                });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Nominate { position } => {
-                if let Ok(target) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Nominate { target });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
+                let _ = self.engine.apply(EngineCommand::Nominate {
+                    target: position.into(),
+                });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Vote { positions } => {
                 let mut targets = Vec::new();
                 for pos in positions {
-                    if let Ok(chair) = self.engine.chair_from_position(pos) {
-                        targets.push(chair);
-                    }
+                    targets.push(pos.into());
                 }
                 let _ = self.engine.apply(EngineCommand::Vote { targets });
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Shoot { position } => {
-                if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Shoot { target: chair });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
+                let _ = self.engine.apply(EngineCommand::Shoot {
+                    target: position.into(),
+                });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Check { position } => {
-                if let Ok(chair) = self.engine.chair_from_position(position) {
-                    let _ = self.engine.apply(EngineCommand::Check { target: chair });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
+                let _ = self.engine.apply(EngineCommand::Check {
+                    target: position.into(),
+                });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
             Next(subcommand) => match subcommand {
                 commands::NextCommand::Phase => {

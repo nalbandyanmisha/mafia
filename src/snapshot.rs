@@ -70,6 +70,7 @@ pub struct Player {
     pub position: Option<Position>,
     pub role: Option<Role>,
     pub warnings: u8,
+    pub is_silenced: bool,
     pub status: Status,
 }
 
@@ -80,6 +81,7 @@ pub struct Voting {
     pub votes: HashMap<Position, Vec<Position>>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Round {
     pub voting: Voting,
     pub mafia_kill: Option<Position>,
@@ -92,5 +94,20 @@ pub struct Round {
 #[derive(Clone, Debug)]
 pub struct Game {
     pub players: Vec<Player>,
+    pub phase: Phase,
+    pub round: Round,
+    pub current_round: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct Engine {
+    pub game: Game,
     pub actor: Option<Position>,
+}
+
+#[derive(Clone, Debug)]
+pub struct App {
+    pub engine: Engine,
+    pub input: String,
+    pub current_timer: Option<u64>,
 }

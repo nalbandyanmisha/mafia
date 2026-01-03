@@ -38,6 +38,7 @@ impl Snapshot for Player {
             position: self.position,
             role: self.role,
             warnings: self.warnings,
+            is_silenced: self.penalty.silenced,
             status: self.status,
         }
     }
