@@ -1,0 +1,43 @@
+use ratatui::layout::{Constraint, Layout, Margin, Rect};
+
+#[derive(Debug, Clone)]
+pub struct HostLayout {
+    pub area: Rect,
+    pub header: Rect,
+    pub body: Rect,
+    pub footer: Rect,
+}
+
+pub fn host(main_area: Rect) -> HostLayout {
+    let width = main_area.width / 3;
+    let height = main_area.height / 3;
+
+    let x = main_area.x + (main_area.width - width) / 2;
+    let y = main_area.y + (main_area.height - height) / 2;
+
+    let area = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+
+    // Split vertically: header/body/footer
+    let rects = Layout::vertical([
+        Constraint::Length(1), // empty line
+        Constraint::Length(1), // header
+        Constraint::Min(3),    // main
+        Constraint::Length(1), // footer
+    ])
+    .split(area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    }));
+
+    HostLayout {
+        area,
+        header: rects[1],
+        body: rects[2],
+        footer: rects[3],
+    }
+}

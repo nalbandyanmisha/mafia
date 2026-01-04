@@ -1,6 +1,7 @@
+use crate::tui::layout::lobby::LobbyLayout;
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::Alignment,
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -11,25 +12,11 @@ use crate::{
     snapshot::App,
 };
 
-fn calculate_lobby_area(main_area: Rect) -> Rect {
-    // Calculate host/control panel size
-    let host_w = main_area.width / 3;
-    let host_h = main_area.height / 3;
-
-    // Calculate top-left corner to center it in table_area
-    let host_x = main_area.x + (main_area.width - host_w) / 2;
-    let host_y = main_area.y + (main_area.height - host_h) / 2;
-
-    Rect {
-        x: host_x,
-        y: host_y,
-        width: host_w,
-        height: host_h,
-    }
-}
-
-pub fn draw_lobby(frame: &mut Frame, lobby_area: Rect, app: &App) -> Result<(), anyhow::Error> {
-    let lobby = calculate_lobby_area(lobby_area);
+pub fn draw_lobby(
+    frame: &mut Frame,
+    lobby_area: &LobbyLayout,
+    app: &App,
+) -> Result<(), anyhow::Error> {
     let title = match app.engine.game.phase {
         Phase::Lobby(LobbyPhase::Waiting) => "Waiting",
         Phase::Lobby(LobbyPhase::Ready) => "Ready",
@@ -50,15 +37,6 @@ pub fn draw_lobby(frame: &mut Frame, lobby_area: Rect, app: &App) -> Result<(), 
     let ready =
         players.len() == PLAYER_COUNT as usize && players.iter().all(|p| p.position.is_some());
 
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(5),
-            Constraint::Length(3),
-        ])
-        .split(lobby);
-
     let header = Paragraph::new(vec![
         Line::from(Span::styled(
             title,
@@ -69,7 +47,7 @@ pub fn draw_lobby(frame: &mut Frame, lobby_area: Rect, app: &App) -> Result<(), 
     ])
     .block(Block::default().borders(Borders::ALL));
 
-    frame.render_widget(header, layout[0]);
+    frame.render_widget(header, lobby_area.header);
 
     let mut lines = Vec::new();
 
@@ -96,7 +74,7 @@ pub fn draw_lobby(frame: &mut Frame, lobby_area: Rect, app: &App) -> Result<(), 
     let player_list =
         Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Players"));
 
-    frame.render_widget(player_list, layout[1]);
+    frame.render_widget(player_list, lobby_area.body);
 
     let available = if available_positions.is_empty() {
         "none".to_string()
@@ -123,6 +101,6 @@ pub fn draw_lobby(frame: &mut Frame, lobby_area: Rect, app: &App) -> Result<(), 
     ])
     .block(Block::default().borders(Borders::ALL));
 
-    frame.render_widget(footer, layout[2]);
+    frame.render_widget(footer, lobby_area.footer);
     Ok(())
 }

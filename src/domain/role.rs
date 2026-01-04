@@ -1,4 +1,5 @@
 use clap::ValueEnum;
+use std::fmt::Display;
 use std::str::FromStr;
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Copy, ValueEnum)]
 pub enum Role {
@@ -7,6 +8,13 @@ pub enum Role {
     Mafia,
     Don,
     Sheriff,
+}
+
+impl Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s: &str = (*self).into();
+        write!(f, "{s}")
+    }
 }
 
 impl From<Role> for &'static str {

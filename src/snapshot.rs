@@ -8,63 +8,6 @@ pub trait Snapshot {
 }
 
 #[derive(Clone, Debug)]
-pub struct PlayerData {
-    pub name: String,
-    pub role: Option<Role>,
-    pub warnings: u8,
-    pub life_status: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ChairData {
-    pub position: usize,
-}
-
-#[derive(Clone, Debug)]
-pub struct SeatData {
-    pub chair: ChairData,
-    pub player: Option<PlayerData>, // None if empty
-}
-
-#[derive(Clone, Debug)]
-pub struct TableData {
-    pub seats: Vec<SeatData>,
-}
-
-#[derive(Clone, Debug)]
-pub struct VotingData {
-    pub nominations: HashMap<ChairData, ChairData>,
-    pub nominees: Vec<ChairData>,
-    pub votes: HashMap<ChairData, Vec<ChairData>>, // nominee -> voters
-}
-
-#[derive(Clone, Debug)]
-pub struct RoundData {
-    pub voting: VotingData,
-    pub mafia_kill: Option<ChairData>,
-    pub sheriff_check: Option<ChairData>,
-    pub don_check: Option<ChairData>,
-    pub eliminated: Vec<ChairData>,
-    pub removed: Vec<ChairData>,
-}
-
-#[derive(Clone, Debug)]
-pub struct EngineData {
-    pub table: TableData,
-    pub phase: Phase,
-    pub round: RoundData,
-    pub current_round: usize,
-    pub actor: Option<ChairData>,
-}
-
-#[derive(Clone, Debug)]
-pub struct AppData {
-    pub engine: EngineData,
-    pub input: String,
-    pub current_timer: Option<u64>,
-}
-
-#[derive(Clone, Debug)]
 pub struct Player {
     pub name: String,
     pub position: Option<Position>,
@@ -89,6 +32,45 @@ pub struct Round {
     pub don_check: Option<Position>,
     pub eliminated: Vec<Position>,
     pub removed: Vec<Position>,
+}
+
+impl Round {
+    pub fn is_nominated(&self, pos: Position) -> bool {
+        self.voting.nominees.contains(&pos)
+    }
+
+    pub fn nominated_by(&self, pos: Position) -> Option<Position> {
+        self.voting.nominations.iter().find_map(
+            |(by, target)| {
+                if *target == pos { Some(*by) } else { None }
+            },
+        )
+    }
+
+    pub fn votes_received(&self, pos: Position) -> Vec<Position> {
+        self.voting
+            .votes
+            .iter()
+            .filter_map(|(target, voters)| {
+                if *target == pos {
+                    Some(voters.clone())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect()
+    }
+
+    pub fn voted_for(&self, voter: Position) -> Option<Position> {
+        self.voting.votes.iter().find_map(|(target, voters)| {
+            if voters.contains(&voter) {
+                Some(*target)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 #[derive(Clone, Debug)]

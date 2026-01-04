@@ -6,9 +6,11 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, Wrap},
 };
 
+use crate::tui::layout::chair::ChairLayout;
 use crate::{
     domain::{position::Position, status::Status},
     snapshot::Player,
+    tui::view::PlayerView,
 };
 
 enum Visual {
@@ -125,14 +127,15 @@ fn build_chair_content(player: &Player) -> Result<Paragraph<'static>, anyhow::Er
 
 pub fn draw_chair(
     frame: &mut Frame,
-    area: Rect,
+    chair: &ChairLayout,
+    view: &PlayerView,
     player: &Player,
     actor: &Option<Position>,
 ) -> Result<(), anyhow::Error> {
-    let mut visual = if player.position == *actor {
+    let mut visual = if view.is_current_speaker {
         Visual::Speaking
     } else {
-        match player.status {
+        match view.status {
             Status::Alive => Visual::Alive,
             Status::Dead => Visual::Dead,
             Status::Removed => Visual::Removed,
@@ -140,16 +143,20 @@ pub fn draw_chair(
         }
     };
 
-    if player.is_silenced {
+    if view.is_silenced {
         visual = Visual::Muted;
+    }
+
+    if view.is_nominated {
+        visual = Visual::Candidate;
     }
 
     let chair_frame = build_chair_frame(&visual, &player.position.unwrap())?;
     let chair_content = build_chair_content(&player.clone())?;
 
-    let centered_area = centered_area(chair_frame.inner(area), 2);
+    let centered_area = centered_area(chair_frame.inner(chair.area), 2);
 
-    frame.render_widget(chair_frame.clone(), area);
+    frame.render_widget(chair_frame.clone(), chair.area);
     frame.render_widget(chair_content, centered_area);
     Ok(())
 }

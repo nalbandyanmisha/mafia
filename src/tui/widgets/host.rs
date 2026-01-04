@@ -1,3 +1,4 @@
+use crate::tui::layout::host::HostLayout;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -11,7 +12,11 @@ use crate::{
     snapshot::{App, Engine, Game},
 };
 
-pub fn draw_host(frame: &mut Frame, host_area: Rect, host_data: &App) -> Result<(), anyhow::Error> {
+pub fn draw_host(
+    frame: &mut Frame,
+    host: &HostLayout,
+    host_data: &App,
+) -> Result<(), anyhow::Error> {
     let (text, style) = match host_data.engine.game.phase {
         Phase::Lobby(_) => ("Lobby".to_string(), Style::default().fg(Color::Gray)),
         Phase::Day(_) => (
@@ -24,26 +29,19 @@ pub fn draw_host(frame: &mut Frame, host_area: Rect, host_data: &App) -> Result<
         ),
     };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .title(text)
-        .title_alignment(Alignment::Center)
-        .style(style);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .title(text)
+            .title_alignment(Alignment::Center)
+            .style(style),
+        host.area,
+    );
 
-    let inner = block.inner(host_area);
-    frame.render_widget(block, host_area);
-    let sections = Layout::vertical([
-        Constraint::Length(1), // empty line
-        Constraint::Length(1), // header
-        Constraint::Min(3),    // main
-        Constraint::Length(1), // footer
-    ])
-    .split(inner);
-
-    draw_host_header(frame, sections[1], &host_data.engine.game)?;
-    draw_host_main(frame, sections[2], &host_data.engine)?;
-    draw_host_footer(frame, sections[3], host_data)?;
+    draw_host_header(frame, host.header, &host_data.engine.game)?;
+    draw_host_main(frame, host.body, &host_data.engine)?;
+    draw_host_footer(frame, host.footer, host_data)?;
 
     Ok(())
 }

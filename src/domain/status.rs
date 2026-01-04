@@ -9,6 +9,13 @@ pub enum Status {
     Removed,
 }
 
+impl std::fmt::Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s: &str = (*self).into();
+        write!(f, "{s}")
+    }
+}
+
 impl From<Status> for &'static str {
     fn from(s: Status) -> Self {
         match s {
