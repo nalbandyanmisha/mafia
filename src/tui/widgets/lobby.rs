@@ -12,11 +12,7 @@ use crate::{
     snapshot::App,
 };
 
-pub fn draw_lobby(
-    frame: &mut Frame,
-    lobby_area: &LobbyLayout,
-    app: &App,
-) -> Result<(), anyhow::Error> {
+pub fn draw(frame: &mut Frame, lobby_area: &LobbyLayout, app: &App) -> Result<(), anyhow::Error> {
     let title = match app.engine.game.phase {
         Phase::Lobby(LobbyPhase::Waiting) => "Waiting",
         Phase::Lobby(LobbyPhase::Ready) => "Ready",

@@ -125,7 +125,7 @@ fn build_chair_content(player: &Player) -> Result<Paragraph<'static>, anyhow::Er
     }
 }
 
-pub fn draw_chair(
+pub fn draw(
     frame: &mut Frame,
     chair: &ChairLayout,
     view: &PlayerView,

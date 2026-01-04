@@ -1,9 +1,8 @@
 pub mod chair;
+pub mod command;
+pub mod events;
 pub mod host;
 pub mod lobby;
-pub mod root;
+pub mod main;
+pub mod shell;
 pub mod table;
-
-pub use chair::ChairLayout;
-pub use root::RootLayout;
-pub use table::TableLayout;
