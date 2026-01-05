@@ -1,16 +1,14 @@
-pub mod actor;
 pub mod check;
 pub mod player;
-pub mod turn;
 pub mod voting;
 
 use std::collections::HashMap;
 
 use crate::domain::{Position, Role, RoundId};
-use crate::engine::game::actor::Actor;
-use crate::engine::game::player::Player;
-use crate::engine::game::turn::Turn;
-use crate::engine::game::voting::Voting;
+use crate::engine::{
+    Actor, Turn,
+    game::{player::Player, voting::Voting},
+};
 use crate::snapshot::{self, Snapshot};
 
 #[derive(Debug, thiserror::Error)]

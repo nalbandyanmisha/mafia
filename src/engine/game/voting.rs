@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     domain::position::Position,
-    engine::game::{actor::Actor, turn::Turn},
+    engine::{Actor, Turn},
     snapshot::{self, Snapshot},
 };
 

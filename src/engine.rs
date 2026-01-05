@@ -1,13 +1,13 @@
+pub mod actor;
 pub mod commands;
-
 pub mod events;
 pub mod game;
+pub mod turn;
 
-use self::{
-    commands::Command,
-    events::Event,
-    game::{Game, actor::Actor, turn::Turn},
-};
+use actor::Actor;
+use turn::Turn;
+
+use self::{commands::Command, events::Event, game::Game};
 use crate::{
     domain::{
         Position, RoundId,
