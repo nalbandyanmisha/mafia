@@ -4,16 +4,14 @@ pub mod round;
 pub mod turn;
 pub mod voting;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-use crate::domain::{
-    Position, Role, RoundId,
-    phase::{self, Phase},
-};
+use crate::domain::{Position, Role, RoundId};
 use crate::engine::game::actor::Actor;
 use crate::engine::game::player::Player;
 use crate::engine::game::round::Round;
 use crate::engine::game::turn::Turn;
+use crate::engine::game::voting::Voting;
 use crate::snapshot::{self, Snapshot};
 
 #[derive(Debug, thiserror::Error)]
@@ -31,7 +29,8 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub struct Game {
     players: Vec<Player>,
-    phase: Phase,
+    voting: HashMap<RoundId, voting::Voting>,
+    round: usize,
     rounds: BTreeMap<RoundId, Round>,
     current_round: RoundId,
     roles_pool: Vec<Role>,
@@ -44,7 +43,12 @@ impl Snapshot for Game {
     fn snapshot(&self) -> Self::Output {
         snapshot::Game {
             players: self.players.iter().map(|p| p.snapshot()).collect(),
-            phase: self.phase,
+            round_new: self.round,
+            voting: self
+                .voting
+                .iter()
+                .map(|(k, v)| (k.current(), v.snapshot()))
+                .collect(),
             round: self
                 .rounds
                 .get(&self.current_round)
@@ -107,6 +111,8 @@ impl Game {
     pub fn new() -> Self {
         let mut positions_pool = Vec::new();
         let players = Vec::with_capacity(Self::PLAYER_COUNT as usize);
+        let voting = HashMap::new();
+        let round = 0;
 
         for pos in 1..=Self::PLAYER_COUNT {
             positions_pool.push(Position::new(pos));
@@ -127,31 +133,38 @@ impl Game {
 
         Self {
             players,
+            voting,
+            round,
             roles_pool,
             positions_pool,
-            phase: Phase::Lobby(phase::LobbyPhase::Waiting),
             rounds: BTreeMap::new(),
             current_round: RoundId(0),
         }
     }
 
-    /* ---------------- Rounds ---------------- */
+    /* ---------------- Votes & Nominations ---------------- */
 
     pub fn add_nomination(&mut self, nominator: Position, nominee: Position) -> Result<(), Error> {
-        self.round_mut(self.round_id())
-            .voting_mut()
-            .unwrap()
-            .record_nomination(nominator, nominee);
+        let voting = self.voting.entry(self.round.into()).or_default();
+        voting.record_nomination(nominator, nominee);
         Ok(())
     }
 
     pub fn add_vote(&mut self, voter: Position, nominee: Position) -> Result<(), Error> {
-        self.round_mut(self.round_id())
-            .voting_mut()
-            .unwrap()
-            .record_vote(voter, nominee);
+        let voting = self.voting.entry(self.round.into()).or_default();
+        voting.record_vote(voter, nominee);
         Ok(())
     }
+
+    pub fn voting(&self) -> &HashMap<RoundId, Voting> {
+        &self.voting
+    }
+
+    pub fn voting_mut(&mut self) -> &mut HashMap<RoundId, Voting> {
+        &mut self.voting
+    }
+
+    /* ---------------- Rounds ---------------- */
 
     pub fn round_id(&self) -> RoundId {
         self.current_round
@@ -175,38 +188,6 @@ impl Game {
 
     pub fn round(&self, round_id: RoundId) -> Option<&Round> {
         self.rounds.get(&round_id)
-    }
-
-    /* ---------------- Phase ---------------- */
-
-    pub fn phase(&self) -> Phase {
-        self.phase
-    }
-
-    pub fn set_phase(&mut self, phase: Phase) {
-        self.phase = phase;
-    }
-
-    pub fn sheriff(&self) -> Option<&Player> {
-        self.players
-            .iter()
-            .find(|p| p.role() == Some(Role::Sheriff))
-    }
-
-    pub fn sheriff_mut(&mut self) -> Option<&mut Player> {
-        self.players
-            .iter_mut()
-            .find(|p| p.role() == Some(Role::Sheriff))
-    }
-
-    pub fn don(&self) -> Option<&Player> {
-        self.players.iter().find(|p| p.role() == Some(Role::Don))
-    }
-
-    pub fn don_mut(&mut self) -> Option<&mut Player> {
-        self.players
-            .iter_mut()
-            .find(|p| p.role() == Some(Role::Don))
     }
 
     // ---------------- Players ----------------
@@ -252,6 +233,16 @@ impl Game {
 
     pub fn player_by_name_mut(&mut self, name: &str) -> Option<&mut Player> {
         self.players.iter_mut().find(|p| p.name() == name)
+    }
+
+    pub fn sheriff(&self) -> Option<&Player> {
+        self.players
+            .iter()
+            .find(|p| p.role() == Some(Role::Sheriff))
+    }
+
+    pub fn don(&self) -> Option<&Player> {
+        self.players.iter().find(|p| p.role() == Some(Role::Don))
     }
 
     // ---------------- Roles ----------------

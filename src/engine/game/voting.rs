@@ -6,7 +6,7 @@ use crate::{
     snapshot::{self, Snapshot},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Voting {
     /// Who nominated whom
     /// nominator -> nominee
@@ -78,6 +78,9 @@ impl Voting {
     }
 
     pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
+        if self.nominations.contains_key(&nominator) {
+            return;
+        }
         self.nominations.entry(nominator).or_insert(nominee);
         if !self.nominees.contains(&nominee) {
             self.nominees.push(nominee);

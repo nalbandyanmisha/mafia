@@ -10,7 +10,7 @@ use self::{
 };
 use crate::{
     domain::{
-        Position,
+        Position, RoundId,
         phase::{
             CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, PhaseKind, TurnContext,
             VotingPhase,
@@ -25,6 +25,8 @@ use rand::prelude::*;
 pub struct Engine {
     pub game: Game,
     pub actor: Actor,
+    pub round: RoundId,
+    pub phase: Phase,
 }
 
 impl Snapshot for Engine {
@@ -34,6 +36,8 @@ impl Snapshot for Engine {
         snapshot::Engine {
             game: self.game.snapshot(),
             actor: self.actor.snapshot(),
+            phase: self.phase,
+            round: self.round.current(),
         }
     }
 }
@@ -43,6 +47,8 @@ impl Engine {
         Engine {
             game: Game::new(),
             actor: Actor::new(Position::new(1)),
+            round: RoundId::new(0),
+            phase: Phase::Lobby(LobbyPhase::Waiting),
         }
     }
     pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
@@ -136,8 +142,7 @@ impl Engine {
         self.game
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
-        self.game
-            .set_phase(Phase::Night(NightPhase::RoleAssignment));
+        self.phase = Phase::Night(NightPhase::RoleAssignment);
         self.game.round_mut(self.game.round_id());
         self.actor.set_start(self.first_speaker_of_day());
 
@@ -209,7 +214,7 @@ impl Engine {
 
     fn check(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Night)?;
-        match self.game.phase() {
+        match self.phase {
             Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => {
                 let by = self.game.sheriff();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
@@ -268,7 +273,7 @@ impl Engine {
         use Phase::*;
         use VotingPhase::*;
 
-        match self.game.phase() {
+        match self.phase {
             Night(RoleAssignment) => Some(TurnContext::RoleAssignment),
             Day(Discussion) => Some(TurnContext::DayDiscussion),
             Day(Voting(TieDiscussion)) => Some(TurnContext::VotingDiscussion),
@@ -300,10 +305,10 @@ impl Engine {
             }),
 
             TurnContext::VoteCasting => {
-                let round = self.game.round_mut(self.game.round_id());
-                round
-                    .voting()
-                    .unwrap()
+                let voting = self.game.voting_mut();
+                voting
+                    .entry(self.round)
+                    .or_default()
                     .next_actor(&mut self.actor, |_| true)
             }
 
@@ -334,7 +339,7 @@ impl Engine {
         use Phase::*;
         use VotingPhase::*;
 
-        match self.game.phase() {
+        match self.phase {
             // -------- Lobby --------
             Lobby(Waiting) => {
                 if self.game.available_positions().is_empty() {
@@ -400,7 +405,7 @@ impl Engine {
     fn advance_phase(&mut self) -> Result<Vec<Event>> {
         let next = self.next_phase();
 
-        self.game.set_phase(next);
+        self.phase = next;
         self.actor.reset(self.first_speaker_of_day());
 
         Ok(vec![Event::PhaseAdvanced { phase: next }])
@@ -414,12 +419,9 @@ impl Engine {
     // Guards
     // ------------------------------
     fn ensure_phase(&self, expected: PhaseKind) -> Result<()> {
-        let actual = self.game.phase().kind();
+        let actual = self.phase.kind();
         if actual != expected {
-            bail!(
-                "Wrong phase. Expected {expected:?}, got {:?}",
-                self.game.phase()
-            );
+            bail!("Wrong phase. Expected {expected:?}, got {:?}", self.phase);
         }
         Ok(())
     }

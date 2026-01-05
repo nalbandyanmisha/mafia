@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]
 pub struct Round {
-    voting: Option<Voting>,
     mafia_kill: Option<Position>,
     sheriff_check: Option<Position>,
     don_check: Option<Position>,
@@ -20,15 +19,6 @@ impl Snapshot for Round {
 
     fn snapshot(&self) -> Self::Output {
         snapshot::Round {
-            voting: self
-                .voting
-                .as_ref()
-                .map(|v| v.snapshot())
-                .unwrap_or(snapshot::Voting {
-                    nominations: HashMap::new(),
-                    nominees: Vec::new(),
-                    votes: HashMap::new(),
-                }),
             mafia_kill: self.mafia_kill.map(|c| c.snapshot()),
             sheriff_check: self.sheriff_check.map(|c| c.snapshot()),
             don_check: self.don_check.map(|c| c.snapshot()),
@@ -41,7 +31,6 @@ impl Snapshot for Round {
 impl Round {
     pub fn new() -> Self {
         Round {
-            voting: Some(Voting::new()),
             mafia_kill: None,
             sheriff_check: None,
             don_check: None,
@@ -49,25 +38,6 @@ impl Round {
             removed: Vec::new(),
         }
     }
-
-    pub fn voting_mut(&mut self) -> Option<&mut Voting> {
-        self.voting.as_mut()
-    }
-
-    pub fn voting(&self) -> Option<&Voting> {
-        self.voting.as_ref()
-    }
-
-    /* ---------------- Recording ---------------- */
-
-    // pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
-    //     self.voting
-    //         .as_mut()
-    //         .map(|v| v.record_nomination(nominator, nominee));
-    // }
-    // pub fn record_vote(&mut self, voter: Position, nominee: Position) {
-    //     self.voting.as_mut().map(|v| v.record_vote(voter, nominee));
-    // }
 
     pub fn record_mafia_kill(&mut self, chair: Position) {
         self.mafia_kill = Some(chair);

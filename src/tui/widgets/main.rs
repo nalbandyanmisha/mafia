@@ -22,7 +22,7 @@ pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         layout.area,
     );
 
-    match app.engine.game.phase {
+    match app.engine.phase {
         Phase::Lobby(_) => {
             let lobby_layout = layout::Lobby::new(layout.content);
             lobby::draw(frame, &lobby_layout, app).unwrap();

@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn draw(frame: &mut Frame, lobby_area: &layout::Lobby, app: &App) -> Result<(), anyhow::Error> {
-    let title = match app.engine.game.phase {
+    let title = match app.engine.phase {
         Phase::Lobby(LobbyPhase::Waiting) => "Waiting",
         Phase::Lobby(LobbyPhase::Ready) => "Ready",
         _ => "Unknown",

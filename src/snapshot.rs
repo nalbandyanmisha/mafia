@@ -17,7 +17,7 @@ pub struct Player {
     pub status: Status,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct Voting {
     pub nominations: HashMap<Position, Position>,
     pub nominees: Vec<Position>,
@@ -26,7 +26,6 @@ pub struct Voting {
 
 #[derive(Clone, Debug)]
 pub struct Round {
-    pub voting: Voting,
     pub mafia_kill: Option<Position>,
     pub sheriff_check: Option<Position>,
     pub don_check: Option<Position>,
@@ -34,49 +33,11 @@ pub struct Round {
     pub removed: Vec<Position>,
 }
 
-impl Round {
-    pub fn is_nominated(&self, pos: Position) -> bool {
-        self.voting.nominees.contains(&pos)
-    }
-
-    pub fn nominated_by(&self, pos: Position) -> Option<Position> {
-        self.voting.nominations.iter().find_map(
-            |(by, target)| {
-                if *target == pos { Some(*by) } else { None }
-            },
-        )
-    }
-
-    pub fn votes_received(&self, pos: Position) -> Vec<Position> {
-        self.voting
-            .votes
-            .iter()
-            .filter_map(|(target, voters)| {
-                if *target == pos {
-                    Some(voters.clone())
-                } else {
-                    None
-                }
-            })
-            .flatten()
-            .collect()
-    }
-
-    pub fn voted_for(&self, voter: Position) -> Option<Position> {
-        self.voting.votes.iter().find_map(|(target, voters)| {
-            if voters.contains(&voter) {
-                Some(*target)
-            } else {
-                None
-            }
-        })
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Game {
     pub players: Vec<Player>,
-    pub phase: Phase,
+    pub round_new: usize,
+    pub voting: HashMap<usize, Voting>,
     pub round: Round,
     pub current_round: usize,
 }
@@ -84,6 +45,8 @@ pub struct Game {
 #[derive(Clone, Debug)]
 pub struct Engine {
     pub game: Game,
+    pub phase: Phase,
+    pub round: usize,
     pub actor: Option<Position>,
 }
 

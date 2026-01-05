@@ -1,4 +1,4 @@
-use crate::tui::layout;
+use crate::{snapshot::Voting, tui::layout};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -9,11 +9,11 @@ use ratatui::{
 
 use crate::{
     domain::phase::{CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, VotingPhase},
-    snapshot::{App, Engine, Game},
+    snapshot::{App, Engine},
 };
 
 pub fn draw(frame: &mut Frame, host: &layout::Host, host_data: &App) -> Result<(), anyhow::Error> {
-    let (text, style) = match host_data.engine.game.phase {
+    let (text, style) = match host_data.engine.phase {
         Phase::Lobby(_) => ("Lobby".to_string(), Style::default().fg(Color::Gray)),
         Phase::Day(_) => (
             format!("Day ·  {}", host_data.engine.game.current_round),
@@ -35,7 +35,7 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, host_data: &App) -> Result<(
         host.area,
     );
 
-    draw_host_header(frame, host.header, &host_data.engine.game)?;
+    draw_host_header(frame, host.header, &host_data.engine)?;
     draw_host_main(frame, host.body, &host_data.engine)?;
     draw_host_footer(frame, host.footer, host_data)?;
 
@@ -45,7 +45,7 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, host_data: &App) -> Result<(
 fn draw_host_header(
     frame: &mut Frame,
     area: Rect,
-    engine_data: &Game,
+    engine_data: &Engine,
 ) -> Result<(), anyhow::Error> {
     let (text, style) = match engine_data.phase {
         Phase::Lobby(LobbyPhase::Waiting) => ("Waiting", Style::default().fg(Color::Gray)),
@@ -86,7 +86,7 @@ fn draw_host_main(
     area: Rect,
     engine_data: &Engine,
 ) -> Result<(), anyhow::Error> {
-    let (title, subtitle) = match engine_data.game.phase {
+    let (title, subtitle) = match engine_data.phase {
         Phase::Lobby(LobbyPhase::Waiting) => ("WAITING", None),
         Phase::Lobby(LobbyPhase::Ready) => ("Ready", None),
 
@@ -99,8 +99,10 @@ fn draw_host_main(
                     c.value(),
                     engine_data
                         .game
-                        .round
                         .voting
+                        .get(&engine_data.game.round_new)
+                        .cloned()
+                        .unwrap_or_else(Voting::default)
                         .nominations
                         .get(&c)
                         .map_or(0, |n| n.value())
@@ -113,8 +115,10 @@ fn draw_host_main(
                 "Nominated: {}",
                 engine_data
                     .game
-                    .round
                     .voting
+                    .get(&engine_data.game.round_new)
+                    .cloned()
+                    .unwrap_or_else(Voting::default)
                     .nominees
                     .iter()
                     .map(|c| format!("🪑{}", c.value()))
@@ -130,13 +134,21 @@ fn draw_host_main(
                 format!(
                     "Player at {}🪑 was voted by {:?}",
                     c.value(),
-                    engine_data.game.round.voting.votes.get(&c).map(|voters| {
-                        voters
-                            .iter()
-                            .map(|v| format!("🪑{}", v.value()))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
+                    engine_data
+                        .game
+                        .voting
+                        .get(&engine_data.game.round_new)
+                        .cloned()
+                        .unwrap_or_else(Voting::default)
+                        .votes
+                        .get(&c)
+                        .map(|voters| {
+                            voters
+                                .iter()
+                                .map(|v| format!("🪑{}", v.value()))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
                 )
             }),
         ),

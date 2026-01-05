@@ -1,5 +1,5 @@
 use crate::domain::{Position, Role, Status};
-use crate::snapshot;
+use crate::snapshot::{self, Voting};
 #[derive(Debug, Clone)]
 pub struct PlayerView {
     pub name: String,
@@ -23,8 +23,10 @@ impl PlayerView {
         let is_nominated = app
             .engine
             .game
-            .round
             .voting
+            .get(&app.engine.game.round_new)
+            .cloned()
+            .unwrap_or_else(Voting::default)
             .nominees
             .iter()
             .any(|n| n == &position);
@@ -32,8 +34,10 @@ impl PlayerView {
         let nominated = app
             .engine
             .game
-            .round
             .voting
+            .get(&app.engine.game.round_new)
+            .cloned()
+            .unwrap_or_else(Voting::default)
             .nominations
             .iter()
             .find(|n| n.0 == &position)
