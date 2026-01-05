@@ -1,17 +1,18 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::Alignment,
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders},
 };
 
-use crate::tui::layout::chair::ChairLayout;
+use crate::tui::layout;
 use crate::{
     domain::{position::Position, status::Status},
     snapshot::Player,
     tui::view::PlayerView,
 };
+
+use super::player;
 
 enum Visual {
     Empty,      // no player
@@ -22,19 +23,6 @@ enum Visual {
     Speaking,   // player is currently speaking
     Muted,      // player is muted one turn due to warnings
     Candidate,  // player is a candidate to be voted as mafia
-}
-
-fn centered_area(area: Rect, height: u16) -> Rect {
-    let vertical = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(height),
-            Constraint::Min(0),
-        ])
-        .split(area);
-
-    vertical[1]
 }
 
 fn build_chair_frame(
@@ -92,71 +80,25 @@ fn build_chair_frame(
     Ok(block)
 }
 
-fn build_chair_content(player: &Player) -> Result<Paragraph<'static>, anyhow::Error> {
-    match player.status {
-        Status::Alive => {
-            let role = if let Some(r) = player.role {
-                format!("{r:?}",)
-            } else {
-                "No Role".to_string()
-            };
-            let lines = vec![
-                Line::from(vec![
-                    Span::styled(
-                        player.name.clone(),
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("   "),
-                    Span::styled(
-                        format!("⚠️{}", player.warnings),
-                        Style::default().fg(Color::Yellow),
-                    ),
-                ]),
-                Line::from(vec![Span::styled(role, Style::default().fg(Color::Gray))]),
-            ];
-
-            Ok(Paragraph::new(lines)
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: true }))
-        }
-        _ => Ok(Paragraph::new("Empty Seat, Player is not alive")
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true })),
-    }
-}
-
 pub fn draw(
     frame: &mut Frame,
-    chair: &ChairLayout,
+    chair: &layout::Chair,
     view: &PlayerView,
     player: &Player,
     actor: &Option<Position>,
 ) -> Result<(), anyhow::Error> {
-    let mut visual = if view.is_current_speaker {
-        Visual::Speaking
-    } else {
-        match view.status {
-            Status::Alive => Visual::Alive,
-            Status::Dead => Visual::Dead,
-            Status::Removed => Visual::Removed,
-            Status::Eliminated => Visual::Eliminated,
-        }
+    let visual = match view.status {
+        Status::Alive => Visual::Alive,
+        Status::Dead => Visual::Dead,
+        Status::Removed => Visual::Removed,
+        Status::Eliminated => Visual::Eliminated,
     };
 
-    if view.is_silenced {
-        visual = Visual::Muted;
-    }
-
-    if view.is_nominated {
-        visual = Visual::Candidate;
-    }
-
     let chair_frame = build_chair_frame(&visual, &player.position.unwrap())?;
-    let chair_content = build_chair_content(&player.clone())?;
-
-    let centered_area = centered_area(chair_frame.inner(chair.area), 2);
 
     frame.render_widget(chair_frame.clone(), chair.area);
-    frame.render_widget(chair_content, centered_area);
+
+    let player_layout = layout::Player::new(chair.area, 6);
+    player::draw(frame, &player_layout, view);
     Ok(())
 }

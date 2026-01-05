@@ -1,12 +1,12 @@
 use ratatui::layout::{Margin, Rect};
 
 #[derive(Debug, Clone)]
-pub struct ChairLayout {
+pub struct Chair {
     pub area: Rect,
     pub content: Rect, // inner area for player info
 }
 
-impl ChairLayout {
+impl Chair {
     /// Create a ChairLayout from a given area
     pub fn new(area: Rect) -> Self {
         let content = area.inner(Margin {
@@ -14,7 +14,6 @@ impl ChairLayout {
             horizontal: 1,
         });
 
-        ChairLayout { area, content }
+        Self { area, content }
     }
 }
-

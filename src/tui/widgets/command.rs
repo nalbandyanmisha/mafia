@@ -7,7 +7,7 @@ use ratatui::{
 use crate::tui::layout;
 
 pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, input: &str) {
-    let layout = layout::command::command(area);
+    let layout = layout::Command::new(area);
 
     frame.render_widget(
         Block::default()

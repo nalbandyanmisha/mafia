@@ -6,15 +6,15 @@ pub mod game;
 use self::{
     commands::Command,
     events::Event,
-    game::{Game, actor::Actor, round::RoundId, turn::Turn},
+    game::{Game, actor::Actor, turn::Turn},
 };
 use crate::{
     domain::{
+        Position,
         phase::{
             CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, PhaseKind, TurnContext,
             VotingPhase,
         },
-        position::Position,
     },
     snapshot::{self, Snapshot},
 };
@@ -119,7 +119,7 @@ impl Engine {
             .player_by_name(name)
             .ok_or_else(|| anyhow::anyhow!("Player not found"))?
             .position()
-            .ok_or_else(|| anyhow::anyhow!("Player {} does not have an assigned position", name))?;
+            .ok_or_else(|| anyhow::anyhow!("Player {name} does not have an assigned position"))?;
         let player = self
             .game
             .player_by_name_mut(name)
@@ -138,8 +138,7 @@ impl Engine {
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
         self.game
             .set_phase(Phase::Night(NightPhase::RoleAssignment));
-        self.game.current_round = RoundId(0);
-        self.game.rounds.insert(RoundId(0), Default::default());
+        self.game.round_mut(self.game.round_id());
         self.actor.set_start(self.first_speaker_of_day());
 
         Ok(vec![Event::GameStarted])
@@ -215,13 +214,17 @@ impl Engine {
                 let by = self.game.sheriff();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.game.current_round_mut().record_sheriff_check(target);
+                self.game
+                    .round_mut(self.game.round_id())
+                    .record_sheriff_check(target);
             }
             Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => {
                 let by = self.game.don();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.game.current_round_mut().record_don_check(target);
+                self.game
+                    .round_mut(self.game.round_id())
+                    .record_don_check(target);
             }
             _ => bail!("Not in investigation phase"),
         };
@@ -297,10 +300,9 @@ impl Engine {
             }),
 
             TurnContext::VoteCasting => {
-                let round = self.game.current_round_mut();
+                let round = self.game.round_mut(self.game.round_id());
                 round
-                    .voting
-                    .clone()
+                    .voting()
                     .unwrap()
                     .next_actor(&mut self.actor, |_| true)
             }
@@ -361,13 +363,16 @@ impl Engine {
             }
             Night(SheriffReveal) => Night(MafiaBriefing),
             Night(MafiaBriefing) => {
-                if self.game.current_round == RoundId(0) {
+                if self.game.round_id().is_first() {
                     Day(Discussion)
                 } else {
                     Night(Investigation(Sheriff))
                 }
             }
-            Night(MafiaShoot) => Night(Investigation(Sheriff)),
+            Night(MafiaShoot) => {
+                self.game.next_round();
+                Night(Investigation(Sheriff))
+            }
             Night(Investigation(Sheriff)) => Night(Investigation(Don)),
             Night(Investigation(Don)) => Day(Morning),
 
@@ -385,7 +390,7 @@ impl Engine {
                 TieDiscussion => Day(Voting(TieRevote)),
                 TieRevote => Day(Voting(Resolution)),
                 Resolution => {
-                    self.game.start_new_round();
+                    self.game.next_round();
                     Night(MafiaShoot)
                 }
             },
@@ -402,7 +407,7 @@ impl Engine {
     }
 
     fn first_speaker_of_day(&self) -> Position {
-        ((self.game.current_round.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
+        ((self.game.round_id().0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
     }
 
     // ------------------------------

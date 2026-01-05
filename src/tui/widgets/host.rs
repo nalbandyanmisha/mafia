@@ -1,4 +1,4 @@
-use crate::tui::layout::host::HostLayout;
+use crate::tui::layout;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -12,7 +12,7 @@ use crate::{
     snapshot::{App, Engine, Game},
 };
 
-pub fn draw(frame: &mut Frame, host: &HostLayout, host_data: &App) -> Result<(), anyhow::Error> {
+pub fn draw(frame: &mut Frame, host: &layout::Host, host_data: &App) -> Result<(), anyhow::Error> {
     let (text, style) = match host_data.engine.game.phase {
         Phase::Lobby(_) => ("Lobby".to_string(), Style::default().fg(Color::Gray)),
         Phase::Day(_) => (

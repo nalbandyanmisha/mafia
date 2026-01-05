@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let layout = layout::main::main(area);
+    let layout = layout::Main::new(area);
 
     frame.render_widget(
         Block::default()
@@ -24,11 +24,11 @@ pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     match app.engine.game.phase {
         Phase::Lobby(_) => {
-            let lobby_layout = layout::lobby::lobby(layout.content);
+            let lobby_layout = layout::Lobby::new(layout.content);
             lobby::draw(frame, &lobby_layout, app).unwrap();
         }
         _ => {
-            let table_layout = layout::table::table(layout.content, 10);
+            let table_layout = layout::Table::new(layout.content, 10);
             table::draw(frame, &table_layout, app).unwrap();
         }
     }

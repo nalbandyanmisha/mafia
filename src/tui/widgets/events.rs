@@ -7,7 +7,7 @@ use ratatui::{
 use crate::{snapshot::App, tui::layout};
 
 pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let layout = layout::events::events(area);
+    let layout = layout::Events::new(area);
 
     frame.render_widget(
         Block::default()
@@ -20,4 +20,3 @@ pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     // placeholder for now
     frame.render_widget(Paragraph::new("No events yet"), layout.content);
 }
-

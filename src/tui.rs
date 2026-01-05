@@ -38,7 +38,7 @@ pub fn restore_terminal() -> anyhow::Result<()> {
 }
 
 pub fn draw_ui(frame: &mut Frame, app: &snapshot::App) {
-    let shell = layout::shell::shell(frame.area());
+    let shell = layout::Shell::new(frame.area());
 
     main::draw(frame, shell.main, app);
     events::draw(frame, shell.events, app);

@@ -10,9 +10,9 @@ use crate::{
 pub struct Voting {
     /// Who nominated whom
     /// nominator -> nominee
-    pub nominations: HashMap<Position, Position>,
-    pub nominees: Vec<Position>,
-    pub votes: HashMap<Position, Vec<Position>>, // nominee -> voters
+    nominations: HashMap<Position, Position>,
+    nominees: Vec<Position>,
+    votes: HashMap<Position, Vec<Position>>, // nominee -> voters
 }
 
 impl Snapshot for Voting {
@@ -78,19 +78,14 @@ impl Voting {
     }
 
     pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
-        if !self.nominations.contains_key(&nominator) {
-            self.nominations.insert(nominator, nominee);
-        }
+        self.nominations.entry(nominator).or_insert(nominee);
         if !self.nominees.contains(&nominee) {
             self.nominees.push(nominee);
         }
     }
 
     pub fn record_vote(&mut self, voter: Position, nominee: Position) {
-        self.votes
-            .entry(nominee)
-            .or_insert_with(Vec::new)
-            .push(voter);
+        self.votes.entry(nominee).or_default().push(voter);
     }
 
     pub fn get_nominations(&self) -> &HashMap<Position, Position> {

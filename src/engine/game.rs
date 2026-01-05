@@ -7,13 +7,12 @@ pub mod voting;
 use std::collections::BTreeMap;
 
 use crate::domain::{
+    Position, Role, RoundId,
     phase::{self, Phase},
-    position::Position,
-    role::Role,
 };
 use crate::engine::game::actor::Actor;
 use crate::engine::game::player::Player;
-use crate::engine::game::round::{Round, RoundId};
+use crate::engine::game::round::Round;
 use crate::engine::game::turn::Turn;
 use crate::snapshot::{self, Snapshot};
 
@@ -33,8 +32,8 @@ pub enum Error {
 pub struct Game {
     players: Vec<Player>,
     phase: Phase,
-    pub rounds: BTreeMap<RoundId, Round>,
-    pub current_round: RoundId,
+    rounds: BTreeMap<RoundId, Round>,
+    current_round: RoundId,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
 }
@@ -138,26 +137,44 @@ impl Game {
 
     /* ---------------- Rounds ---------------- */
 
-    pub fn start_new_round(&mut self) {
-        self.current_round = self.current_round.next();
-        self.rounds.insert(self.current_round, Round::new());
-    }
-
     pub fn add_nomination(&mut self, nominator: Position, nominee: Position) -> Result<(), Error> {
-        self.current_round_mut()
+        self.round_mut(self.round_id())
+            .voting_mut()
+            .unwrap()
             .record_nomination(nominator, nominee);
         Ok(())
     }
 
     pub fn add_vote(&mut self, voter: Position, nominee: Position) -> Result<(), Error> {
-        self.current_round_mut().record_vote(voter, nominee);
+        self.round_mut(self.round_id())
+            .voting_mut()
+            .unwrap()
+            .record_vote(voter, nominee);
         Ok(())
     }
 
+    pub fn round_id(&self) -> RoundId {
+        self.current_round
+    }
+
+    pub fn next_round(&mut self) {
+        self.current_round.next();
+    }
+
     pub fn current_round_mut(&mut self) -> &mut Round {
-        self.rounds
-            .entry(self.current_round)
-            .or_insert_with(Round::new)
+        self.round_mut(self.current_round)
+    }
+
+    pub fn current_round(&self) -> Option<&Round> {
+        self.round(self.current_round)
+    }
+
+    pub fn round_mut(&mut self, round_id: RoundId) -> &mut Round {
+        self.rounds.entry(round_id).or_insert_with(Round::new)
+    }
+
+    pub fn round(&self, round_id: RoundId) -> Option<&Round> {
+        self.rounds.get(&round_id)
     }
 
     /* ---------------- Phase ---------------- */

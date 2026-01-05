@@ -1,34 +1,13 @@
 use crate::{
-    domain::position::Position,
+    domain::Position,
     engine::game::voting::Voting,
     snapshot::{self, Snapshot},
 };
 use std::collections::HashMap;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RoundId(pub usize);
-
-impl std::fmt::Display for RoundId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl RoundId {
-    pub fn next(&self) -> RoundId {
-        RoundId(self.0 + 1)
-    }
-}
-
-impl From<RoundId> for usize {
-    fn from(round_id: RoundId) -> Self {
-        round_id.0
-    }
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct Round {
-    pub voting: Option<Voting>,
+    voting: Option<Voting>,
     mafia_kill: Option<Position>,
     sheriff_check: Option<Position>,
     don_check: Option<Position>,
@@ -71,16 +50,24 @@ impl Round {
         }
     }
 
+    pub fn voting_mut(&mut self) -> Option<&mut Voting> {
+        self.voting.as_mut()
+    }
+
+    pub fn voting(&self) -> Option<&Voting> {
+        self.voting.as_ref()
+    }
+
     /* ---------------- Recording ---------------- */
 
-    pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
-        self.voting
-            .as_mut()
-            .map(|v| v.record_nomination(nominator, nominee));
-    }
-    pub fn record_vote(&mut self, voter: Position, nominee: Position) {
-        self.voting.as_mut().map(|v| v.record_vote(voter, nominee));
-    }
+    // pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
+    //     self.voting
+    //         .as_mut()
+    //         .map(|v| v.record_nomination(nominator, nominee));
+    // }
+    // pub fn record_vote(&mut self, voter: Position, nominee: Position) {
+    //     self.voting.as_mut().map(|v| v.record_vote(voter, nominee));
+    // }
 
     pub fn record_mafia_kill(&mut self, chair: Position) {
         self.mafia_kill = Some(chair);

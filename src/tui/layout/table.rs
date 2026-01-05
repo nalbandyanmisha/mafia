@@ -1,25 +1,28 @@
-use crate::tui::layout::{chair, host};
+use crate::tui::layout;
 use ratatui::layout::Rect;
 
 #[derive(Debug, Clone)]
-pub struct TableLayout {
-    pub host: host::HostLayout,
-    pub chairs: Vec<chair::ChairLayout>,
+pub struct Table {
+    pub host: layout::Host,
+    pub chairs: Vec<layout::Chair>,
 }
 
-pub fn table(main: Rect, chair_count: usize) -> TableLayout {
-    let host = host::host(main);
+impl Table {
+    /// Create a TableLayout from a given area and number of chairs
+    pub fn new(main: Rect, chair_count: usize) -> Self {
+        let host = layout::Host::new(main);
 
-    let chair_w = main.width / 6;
-    let chair_h = main.height / 6;
+        let chair_w = main.width / 6;
+        let chair_h = main.height / 6;
 
-    let mut chairs = calculate_chairs(main, host.area, chair_count, chair_w, chair_h);
+        let mut chairs = calculate_chairs(main, host.area, chair_count, chair_w, chair_h);
 
-    sort_clockwise(&host.area, &mut chairs);
-    chairs.rotate_right(6);
+        sort_clockwise(&host.area, &mut chairs);
+        chairs.rotate_right(6);
 
-    let chairs = chairs.into_iter().map(chair::ChairLayout::new).collect();
-    TableLayout { host, chairs }
+        let chairs = chairs.into_iter().map(layout::Chair::new).collect();
+        Self { host, chairs }
+    }
 }
 
 fn calculate_chairs(table: Rect, host: Rect, n: usize, w: u16, h: u16) -> Vec<Rect> {
