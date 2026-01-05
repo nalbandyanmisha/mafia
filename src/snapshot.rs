@@ -13,8 +13,13 @@ pub struct Player {
     pub position: Option<Position>,
     pub role: Option<Role>,
     pub warnings: u8,
-    pub is_silenced: bool,
     pub status: Status,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Check {
+    pub sheriff: Option<Position>,
+    pub don: Option<Position>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -25,21 +30,11 @@ pub struct Voting {
 }
 
 #[derive(Clone, Debug)]
-pub struct Round {
-    pub mafia_kill: Option<Position>,
-    pub sheriff_check: Option<Position>,
-    pub don_check: Option<Position>,
-    pub eliminated: Vec<Position>,
-    pub removed: Vec<Position>,
-}
-
-#[derive(Clone, Debug)]
 pub struct Game {
     pub players: Vec<Player>,
-    pub round_new: usize,
+    pub kill: HashMap<usize, Position>,
     pub voting: HashMap<usize, Voting>,
-    pub round: Round,
-    pub current_round: usize,
+    pub check: HashMap<usize, Check>,
 }
 
 #[derive(Clone, Debug)]

@@ -1,15 +1,14 @@
 pub mod actor;
+pub mod check;
 pub mod player;
-pub mod round;
 pub mod turn;
 pub mod voting;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use crate::domain::{Position, Role, RoundId};
 use crate::engine::game::actor::Actor;
 use crate::engine::game::player::Player;
-use crate::engine::game::round::Round;
 use crate::engine::game::turn::Turn;
 use crate::engine::game::voting::Voting;
 use crate::snapshot::{self, Snapshot};
@@ -30,9 +29,8 @@ pub enum Error {
 pub struct Game {
     players: Vec<Player>,
     voting: HashMap<RoundId, voting::Voting>,
-    round: usize,
-    rounds: BTreeMap<RoundId, Round>,
-    current_round: RoundId,
+    check: HashMap<RoundId, check::Check>,
+    kill: HashMap<RoundId, Position>,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
 }
@@ -43,17 +41,21 @@ impl Snapshot for Game {
     fn snapshot(&self) -> Self::Output {
         snapshot::Game {
             players: self.players.iter().map(|p| p.snapshot()).collect(),
-            round_new: self.round,
             voting: self
                 .voting
                 .iter()
                 .map(|(k, v)| (k.current(), v.snapshot()))
                 .collect(),
-            round: self
-                .rounds
-                .get(&self.current_round)
-                .map_or_else(|| Round::new().snapshot(), |round| round.snapshot()),
-            current_round: self.current_round.0,
+            check: self
+                .check
+                .iter()
+                .map(|(k, v)| (k.current(), v.snapshot()))
+                .collect(),
+            kill: self
+                .kill
+                .iter()
+                .map(|(k, v)| (k.current(), v.snapshot()))
+                .collect(),
         }
     }
 }
@@ -112,6 +114,8 @@ impl Game {
         let mut positions_pool = Vec::new();
         let players = Vec::with_capacity(Self::PLAYER_COUNT as usize);
         let voting = HashMap::new();
+        let check = HashMap::new();
+        let kill = HashMap::new();
         let round = 0;
 
         for pos in 1..=Self::PLAYER_COUNT {
@@ -134,24 +138,33 @@ impl Game {
         Self {
             players,
             voting,
-            round,
+            check,
+            kill,
             roles_pool,
             positions_pool,
-            rounds: BTreeMap::new(),
-            current_round: RoundId(0),
         }
     }
 
     /* ---------------- Votes & Nominations ---------------- */
 
-    pub fn add_nomination(&mut self, nominator: Position, nominee: Position) -> Result<(), Error> {
-        let voting = self.voting.entry(self.round.into()).or_default();
+    pub fn add_nomination(
+        &mut self,
+        round: RoundId,
+        nominator: Position,
+        nominee: Position,
+    ) -> Result<(), Error> {
+        let voting = self.voting.entry(round).or_default();
         voting.record_nomination(nominator, nominee);
         Ok(())
     }
 
-    pub fn add_vote(&mut self, voter: Position, nominee: Position) -> Result<(), Error> {
-        let voting = self.voting.entry(self.round.into()).or_default();
+    pub fn add_vote(
+        &mut self,
+        round: RoundId,
+        voter: Position,
+        nominee: Position,
+    ) -> Result<(), Error> {
+        let voting = self.voting.entry(round).or_default();
         voting.record_vote(voter, nominee);
         Ok(())
     }
@@ -164,30 +177,22 @@ impl Game {
         &mut self.voting
     }
 
-    /* ---------------- Rounds ---------------- */
-
-    pub fn round_id(&self) -> RoundId {
-        self.current_round
+    /*---------------- Checks ---------------- */
+    pub fn record_sheriff_check(&mut self, round: RoundId, checked: Position) -> Result<(), Error> {
+        let check = self.check.entry(round).or_default();
+        check.record_sheriff_check(checked);
+        Ok(())
     }
 
-    pub fn next_round(&mut self) {
-        self.current_round.next();
+    pub fn record_don_check(&mut self, round: RoundId, checked: Position) -> Result<(), Error> {
+        let check = self.check.entry(round).or_default();
+        check.record_don_check(checked);
+        Ok(())
     }
 
-    pub fn current_round_mut(&mut self) -> &mut Round {
-        self.round_mut(self.current_round)
-    }
-
-    pub fn current_round(&self) -> Option<&Round> {
-        self.round(self.current_round)
-    }
-
-    pub fn round_mut(&mut self, round_id: RoundId) -> &mut Round {
-        self.rounds.entry(round_id).or_insert_with(Round::new)
-    }
-
-    pub fn round(&self, round_id: RoundId) -> Option<&Round> {
-        self.rounds.get(&round_id)
+    pub fn record_mafia_kill(&mut self, round: RoundId, killed: Position) -> Result<(), Error> {
+        self.kill.insert(round, killed);
+        Ok(())
     }
 
     // ---------------- Players ----------------

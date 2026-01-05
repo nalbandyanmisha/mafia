@@ -143,7 +143,6 @@ impl Engine {
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
         self.phase = Phase::Night(NightPhase::RoleAssignment);
-        self.game.round_mut(self.game.round_id());
         self.actor.set_start(self.first_speaker_of_day());
 
         Ok(vec![Event::GameStarted])
@@ -209,6 +208,7 @@ impl Engine {
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
         player.mark_dead();
+        self.game.record_mafia_kill(self.round, target)?;
         Ok(vec![Event::PlayerKilled { target }])
     }
 
@@ -219,17 +219,13 @@ impl Engine {
                 let by = self.game.sheriff();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.game
-                    .round_mut(self.game.round_id())
-                    .record_sheriff_check(target);
+                self.game.record_sheriff_check(self.round, target)?;
             }
             Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => {
                 let by = self.game.don();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
                 self.ensure_alive(target)?;
-                self.game
-                    .round_mut(self.game.round_id())
-                    .record_don_check(target);
+                self.game.record_don_check(self.round, target)?;
             }
             _ => bail!("Not in investigation phase"),
         };
@@ -246,22 +242,22 @@ impl Engine {
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
 
-        self.game.add_nomination(by, target)?;
+        self.game.add_nomination(self.round, by, target)?;
         Ok(vec![Event::PlayerNominated { by, target }])
     }
 
-    fn vote(&mut self, targets: Vec<Position>) -> Result<Vec<Event>> {
+    fn vote(&mut self, voters: Vec<Position>) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Day)?;
 
-        let by = self
+        let nominee = self
             .actor
             .current()
             .ok_or_else(|| anyhow::anyhow!("No active speaker"))?;
-        self.ensure_alive(by)?;
+        self.ensure_alive(nominee)?;
 
-        for &target in &targets {
-            self.ensure_alive(target)?;
-            self.game.add_vote(by, target)?;
+        for &voter in &voters {
+            self.ensure_alive(voter)?;
+            self.game.add_vote(self.round, voter, nominee)?;
         }
 
         Ok(vec![])
@@ -368,14 +364,14 @@ impl Engine {
             }
             Night(SheriffReveal) => Night(MafiaBriefing),
             Night(MafiaBriefing) => {
-                if self.game.round_id().is_first() {
+                if self.round.is_first() {
                     Day(Discussion)
                 } else {
                     Night(Investigation(Sheriff))
                 }
             }
             Night(MafiaShoot) => {
-                self.game.next_round();
+                self.round.advance();
                 Night(Investigation(Sheriff))
             }
             Night(Investigation(Sheriff)) => Night(Investigation(Don)),
@@ -395,7 +391,7 @@ impl Engine {
                 TieDiscussion => Day(Voting(TieRevote)),
                 TieRevote => Day(Voting(Resolution)),
                 Resolution => {
-                    self.game.next_round();
+                    self.round.advance();
                     Night(MafiaShoot)
                 }
             },
@@ -412,7 +408,7 @@ impl Engine {
     }
 
     fn first_speaker_of_day(&self) -> Position {
-        ((self.game.round_id().0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
+        ((self.round.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
     }
 
     // ------------------------------

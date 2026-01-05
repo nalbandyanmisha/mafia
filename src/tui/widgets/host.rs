@@ -1,4 +1,7 @@
-use crate::{snapshot::Voting, tui::layout};
+use crate::{
+    snapshot::{Check, Voting},
+    tui::layout,
+};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -16,11 +19,11 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, host_data: &App) -> Result<(
     let (text, style) = match host_data.engine.phase {
         Phase::Lobby(_) => ("Lobby".to_string(), Style::default().fg(Color::Gray)),
         Phase::Day(_) => (
-            format!("Day ·  {}", host_data.engine.game.current_round),
+            format!("Day ·  {}", host_data.engine.round),
             Style::default().fg(Color::Yellow),
         ),
         Phase::Night(_) => (
-            format!("Night ·  {}", host_data.engine.game.current_round),
+            format!("Night ·  {}", host_data.engine.round),
             Style::default().fg(Color::Magenta),
         ),
     };
@@ -100,7 +103,7 @@ fn draw_host_main(
                     engine_data
                         .game
                         .voting
-                        .get(&engine_data.game.round_new)
+                        .get(&engine_data.round)
                         .cloned()
                         .unwrap_or_else(Voting::default)
                         .nominations
@@ -116,7 +119,7 @@ fn draw_host_main(
                 engine_data
                     .game
                     .voting
-                    .get(&engine_data.game.round_new)
+                    .get(&engine_data.round)
                     .cloned()
                     .unwrap_or_else(Voting::default)
                     .nominees
@@ -137,7 +140,7 @@ fn draw_host_main(
                     engine_data
                         .game
                         .voting
-                        .get(&engine_data.game.round_new)
+                        .get(&engine_data.round)
                         .cloned()
                         .unwrap_or_else(Voting::default)
                         .votes
@@ -162,8 +165,9 @@ fn draw_host_main(
             "MAFIA IS SHOOTING",
             engine_data
                 .game
-                .round
-                .mafia_kill
+                .kill
+                .get(&engine_data.round)
+                .cloned()
                 .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 
@@ -171,8 +175,11 @@ fn draw_host_main(
             "SHERIFF IS CHECKING",
             engine_data
                 .game
-                .round
-                .sheriff_check
+                .check
+                .get(&engine_data.round)
+                .cloned()
+                .unwrap_or_else(Check::default)
+                .sheriff
                 .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 
@@ -180,8 +187,11 @@ fn draw_host_main(
             "DON IS CHECKING",
             engine_data
                 .game
-                .round
-                .don_check
+                .check
+                .get(&engine_data.round)
+                .cloned()
+                .unwrap_or_else(Check::default)
+                .don
                 .map(|c| format!("🎯 Chair {}", c.value())),
         ),
 

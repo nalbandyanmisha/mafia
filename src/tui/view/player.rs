@@ -24,7 +24,7 @@ impl PlayerView {
             .engine
             .game
             .voting
-            .get(&app.engine.game.round_new)
+            .get(&app.engine.round)
             .cloned()
             .unwrap_or_else(Voting::default)
             .nominees
@@ -35,7 +35,7 @@ impl PlayerView {
             .engine
             .game
             .voting
-            .get(&app.engine.game.round_new)
+            .get(&app.engine.round)
             .cloned()
             .unwrap_or_else(Voting::default)
             .nominations
