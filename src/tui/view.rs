@@ -15,3 +15,21 @@ pub use lobby::LobbyView;
 pub use main::MainView;
 pub use player::PlayerView;
 pub use table::TableView;
+
+#[derive(Debug, Clone)]
+pub struct ShellView {
+    pub main: MainView,
+    pub command: CommandView,
+    pub events: EventsView,
+}
+
+impl ShellView {
+    /// Compute the views from the snapshot
+    pub fn new(app: &crate::snapshot::App) -> Self {
+        Self {
+            main: MainView::from_snapshot(app),
+            command: CommandView::from_snapshot(app),
+            events: EventsView::from_snapshot(app),
+        }
+    }
+}

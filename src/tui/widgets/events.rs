@@ -30,9 +30,12 @@ use ratatui::{
 
 use crate::{tui::layout, tui::view::events::EventsView};
 
-pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, view: &EventsView) {
-    let layout = layout::Events::new(area);
-
+pub fn draw(
+    frame: &mut Frame,
+    layout: &layout::Events,
+    view: &EventsView,
+    app: &crate::snapshot::App,
+) {
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)

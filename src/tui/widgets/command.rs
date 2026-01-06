@@ -4,10 +4,15 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::tui::layout;
+use crate::tui::{layout, view};
 
-pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, input: &str) {
-    let layout = layout::Command::new(area);
+pub fn draw(
+    frame: &mut Frame,
+    layout: &layout::Command,
+    view: &view::CommandView,
+    app: &crate::snapshot::App,
+) {
+    let layout = layout::Command::new(layout.area);
 
     frame.render_widget(
         Block::default()
@@ -17,5 +22,5 @@ pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, input: &str) {
         layout.area,
     );
 
-    frame.render_widget(Paragraph::new(input), layout.input);
+    frame.render_widget(Paragraph::new(view.input.clone()), layout.input);
 }

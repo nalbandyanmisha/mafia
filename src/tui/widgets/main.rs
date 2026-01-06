@@ -14,9 +14,7 @@ use crate::{
     },
 };
 
-pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, view: &MainView, app: &App) {
-    let layout = layout::Main::new(area);
-
+pub fn draw(frame: &mut Frame, layout: &layout::Main, view: &MainView, app: &App) {
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)

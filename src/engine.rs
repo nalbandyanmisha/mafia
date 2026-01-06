@@ -390,10 +390,7 @@ impl Engine {
                 VoteCast => Day(Voting(Resolution)),
                 TieDiscussion => Day(Voting(TieRevote)),
                 TieRevote => Day(Voting(Resolution)),
-                Resolution => {
-                    self.round.advance();
-                    Night(MafiaShoot)
-                }
+                Resolution => Night(MafiaShoot),
             },
         }
     }
