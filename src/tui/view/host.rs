@@ -1,5 +1,5 @@
 use crate::{
-    domain::phase::{CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, VotingPhase},
+    domain::phase::{CheckPhase, DayPhase, NightPhase, Phase, VotingPhase},
     snapshot::{App, Check, Voting},
 };
 use ratatui::style::{Color, Modifier, Style};
@@ -38,7 +38,6 @@ impl HostView {
         let engine = &app.engine;
 
         let (title, title_style) = match engine.phase {
-            Phase::Lobby(_) => ("Lobby".into(), Style::default().fg(Color::Gray)),
             Phase::Day(_) => (
                 format!("Day · {}", engine.round),
                 Style::default().fg(Color::Yellow),
@@ -63,9 +62,6 @@ impl HostView {
 
 fn build_header(phase: Phase) -> HostHeader {
     let (text, style) = match phase {
-        Phase::Lobby(LobbyPhase::Waiting) => ("Waiting", Color::Gray),
-        Phase::Lobby(LobbyPhase::Ready) => ("Ready", Color::Gray),
-
         Phase::Day(DayPhase::Morning) => ("Morning", Color::Yellow),
         Phase::Day(DayPhase::Discussion) => ("Discussion", Color::Yellow),
         Phase::Day(DayPhase::Voting(_)) => ("Voting", Color::Yellow),
@@ -93,12 +89,6 @@ fn build_main(app: &App) -> HostMain {
     let engine = &app.engine;
 
     match engine.phase {
-        Phase::Lobby(_) => HostMain {
-            title: "WAITING FOR PLAYERS".into(),
-            subtitle: None,
-            highlight_actor: false,
-        },
-
         Phase::Day(DayPhase::Morning) => HostMain {
             title: "MORNING".into(),
             subtitle: None,
@@ -206,4 +196,3 @@ fn build_footer(app: &App) -> HostFooter {
         },
     }
 }
-

@@ -1,4 +1,4 @@
-use crate::domain::{phase::Phase, position::Position, role::Role, status::Status};
+use crate::domain::{EngineState, Position, Role, Status, phase::Phase};
 use std::collections::HashMap;
 
 pub trait Snapshot {
@@ -42,6 +42,7 @@ pub struct Engine {
     pub game: Game,
     pub phase: Phase,
     pub round: usize,
+    pub state: EngineState,
     pub actor: Option<Position>,
 }
 

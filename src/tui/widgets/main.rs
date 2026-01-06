@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::{
-    domain::phase::Phase,
+    domain::EngineState,
     snapshot::App,
     tui::{
         layout,
@@ -23,8 +23,8 @@ pub fn draw(frame: &mut Frame, layout: &layout::Main, view: &MainView, app: &App
         layout.area,
     );
 
-    match app.engine.phase {
-        Phase::Lobby(_) => {
+    match app.engine.state {
+        EngineState::Lobby(_) => {
             let lobby_layout = layout::Lobby::new(layout.content);
             let lobby_view = crate::tui::view::LobbyView::from_snapshot(app);
             lobby::draw(frame, &lobby_layout, &lobby_view).unwrap();

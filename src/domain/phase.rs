@@ -4,7 +4,6 @@ impl Display for Phase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Phase::*;
         let text = match self {
-            Lobby(_) => "Lobby",
             Night(_) => "Night",
             Day(_) => "Day",
         };
@@ -14,15 +13,8 @@ impl Display for Phase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhaseKind {
-    Lobby,
     Night,
     Day,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LobbyPhase {
-    Waiting,
-    Ready,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,7 +50,6 @@ pub enum DayPhase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
-    Lobby(LobbyPhase),
     Night(NightPhase),
     Day(DayPhase),
 }
@@ -66,7 +57,6 @@ pub enum Phase {
 impl Phase {
     pub fn kind(&self) -> PhaseKind {
         match self {
-            Phase::Lobby(_) => PhaseKind::Lobby,
             Phase::Night(_) => PhaseKind::Night,
             Phase::Day(_) => PhaseKind::Day,
         }

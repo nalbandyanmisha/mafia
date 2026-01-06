@@ -10,11 +10,8 @@ use turn::Turn;
 use self::{commands::Command, events::Event, game::Game};
 use crate::{
     domain::{
-        Position, RoundId,
-        phase::{
-            CheckPhase, DayPhase, LobbyPhase, NightPhase, Phase, PhaseKind, TurnContext,
-            VotingPhase,
-        },
+        EngineState, LobbyStatus, Position, RoundId,
+        phase::{CheckPhase, DayPhase, NightPhase, Phase, PhaseKind, TurnContext, VotingPhase},
     },
     snapshot::{self, Snapshot},
 };
@@ -27,6 +24,7 @@ pub struct Engine {
     pub actor: Actor,
     pub round: RoundId,
     pub phase: Phase,
+    pub state: EngineState,
 }
 
 impl Snapshot for Engine {
@@ -38,6 +36,7 @@ impl Snapshot for Engine {
             actor: self.actor.snapshot(),
             phase: self.phase,
             round: self.round.current(),
+            state: self.state,
         }
     }
 }
@@ -48,7 +47,8 @@ impl Engine {
             game: Game::new(),
             actor: Actor::new(Position::new(1)),
             round: RoundId::new(0),
-            phase: Phase::Lobby(LobbyPhase::Waiting),
+            phase: Phase::Night(NightPhase::RoleAssignment),
+            state: EngineState::Lobby(LobbyStatus::Waiting),
         }
     }
     pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
@@ -73,12 +73,18 @@ impl Engine {
     // Join / Leave
     // ------------------------------
     fn join(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
-        self.ensure_phase(PhaseKind::Lobby)?;
+        self.ensure_lobby_waiting()?;
 
         self.game.add_player(name);
         self.assign_position(name)?;
 
         self.advance_phase()?;
+
+        // As for now position assignment is happning simultaneously with joining,
+        // this is good enough but if seprate those processes later, this logic should be updated
+        if self.game.available_positions().is_empty() {
+            self.state = EngineState::Lobby(LobbyStatus::Ready);
+        }
 
         Ok(vec![Event::PlayerJoined {
             name: name.to_string(),
@@ -86,9 +92,17 @@ impl Engine {
     }
 
     fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Lobby)?;
+        self.ensure_lobby()?;
         self.revoke_position(name)?;
         self.game.remove_player(name);
+
+        // As for now position assignment is happning simultaneously with joining,
+        // this is good enough but if seprate those processes later, this logic should be updated
+        if self.state == EngineState::Lobby(LobbyStatus::Ready)
+            && self.game.available_positions().len() == 1
+        {
+            self.state = EngineState::Lobby(LobbyStatus::Waiting);
+        }
 
         self.advance_phase()?;
 
@@ -98,7 +112,7 @@ impl Engine {
     }
 
     fn assign_position(&mut self, name: &str) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Lobby)?;
+        self.ensure_lobby_waiting()?;
 
         // Pick random seat
         let position = *self
@@ -118,7 +132,7 @@ impl Engine {
     }
 
     fn revoke_position(&mut self, name: &str) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Lobby)?;
+        self.ensure_lobby()?;
 
         let position = self
             .game
@@ -137,11 +151,12 @@ impl Engine {
     }
 
     fn start(&mut self) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Lobby)?;
+        self.ensure_lobby_ready()?;
 
         self.game
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
+        self.state = EngineState::Game(Phase::Night(NightPhase::RoleAssignment));
         self.phase = Phase::Night(NightPhase::RoleAssignment);
         self.actor.set_start(self.first_speaker_of_day());
 
@@ -330,29 +345,11 @@ impl Engine {
     fn next_phase(&mut self) -> Phase {
         use CheckPhase::*;
         use DayPhase::*;
-        use LobbyPhase::*;
         use NightPhase::*;
         use Phase::*;
         use VotingPhase::*;
 
         match self.phase {
-            // -------- Lobby --------
-            Lobby(Waiting) => {
-                if self.game.available_positions().is_empty() {
-                    Lobby(Ready)
-                } else {
-                    Lobby(Waiting)
-                }
-            }
-            Lobby(Ready) => {
-                if !self.game.available_positions().is_empty() {
-                    Lobby(Waiting)
-                } else {
-                    Lobby(Ready)
-                }
-                // To advance from this point host should issue start command
-            }
-
             // -------- Night --------
             Night(RoleAssignment) => {
                 if self.actor.is_completed() {
@@ -411,6 +408,26 @@ impl Engine {
     // ------------------------------
     // Guards
     // ------------------------------
+    pub fn ensure_lobby(&self) -> Result<()> {
+        match &self.state {
+            EngineState::Lobby(_) => Ok(()),
+            other => bail!("Engine is not in Lobby state, got {other:?}",),
+        }
+    }
+
+    pub fn ensure_lobby_waiting(&self) -> Result<()> {
+        match &self.state {
+            EngineState::Lobby(LobbyStatus::Waiting) => Ok(()),
+            other => bail!("Engine is not in Lobby Waiting state, got {other:?}"),
+        }
+    }
+
+    pub fn ensure_lobby_ready(&self) -> Result<()> {
+        match &self.state {
+            EngineState::Lobby(LobbyStatus::Ready) => Ok(()),
+            other => bail!("Engine is not in Lobby Ready state, got {other:?}"),
+        }
+    }
     fn ensure_phase(&self, expected: PhaseKind) -> Result<()> {
         let actual = self.phase.kind();
         if actual != expected {
