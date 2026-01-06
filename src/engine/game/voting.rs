@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    domain::position::Position,
-    engine::{Actor, Turn},
+    domain::{Phase, RoundId, position::Position},
+    engine::{Actor, Turn, TurnContext},
     snapshot::{self, Snapshot},
 };
 
@@ -65,6 +65,19 @@ impl Turn for Voting {
 
         actor.set_completed(true);
         None
+    }
+
+    fn turn_context(&self, round: RoundId, _phase: Phase, actor: &Actor) -> Option<TurnContext> {
+        if self.nominees.is_empty() || actor.is_completed() {
+            return None;
+        }
+
+        // Determine which nominee is active
+        if let Some(current) = actor.current() {
+            Some(TurnContext::VoteCasting)
+        } else {
+            Some(TurnContext::VotingDiscussion)
+        }
     }
 }
 

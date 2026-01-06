@@ -8,6 +8,7 @@ pub mod status;
 
 pub use engine::EngineState;
 pub use lobby::LobbyStatus;
+pub use phase::{CheckPhase, DayPhase, NightPhase, Phase, PhaseKind, VotingPhase};
 pub use position::Position;
 pub use role::Role;
 pub use round::RoundId;

@@ -5,13 +5,13 @@ pub mod game;
 pub mod turn;
 
 use actor::Actor;
-use turn::Turn;
+use turn::{Turn, TurnContext};
 
 use self::{commands::Command, events::Event, game::Game};
 use crate::{
     domain::{
         EngineState, LobbyStatus, Position, RoundId,
-        phase::{CheckPhase, DayPhase, NightPhase, Phase, PhaseKind, TurnContext, VotingPhase},
+        phase::{CheckPhase, DayPhase, NightPhase, Phase, PhaseKind, VotingPhase},
     },
     snapshot::{self, Snapshot},
 };
@@ -286,56 +286,67 @@ impl Engine {
             Day(Discussion) => Some(TurnContext::DayDiscussion),
             Day(Voting(TieDiscussion)) => Some(TurnContext::VotingDiscussion),
             Day(Voting(VoteCast)) => Some(TurnContext::VoteCasting),
-            Night(Investigation(_)) => Some(TurnContext::Investigation),
             _ => None,
         }
     }
 
-    fn advance_actor(&mut self) -> Result<Vec<Event>> {
-        let ctx = match self.turn_context() {
-            Some(c) => c,
-            None => return Ok(vec![]), // no turn in this phase
-        };
+    pub fn advance_actor(&mut self) -> Result<Vec<Event>> {
+        let ctx = self
+            .game
+            .turn_context(self.round, self.phase()?, &self.actor);
 
+        let ctx = match self.state {
+            EngineState::Game(phase) => self.game.turn_context(self.round, phase, &self.actor),
+            _ => None,
+        };
         let next = match ctx {
-            TurnContext::RoleAssignment => self.game.next_actor(&mut self.actor, |position| {
+            Some(TurnContext::RoleAssignment) => self.game.next_actor(&mut self.actor, |pos| {
                 self.game
-                    .player_by_position(position)
+                    .player_by_position(pos)
                     .map(|p| p.role().is_none())
                     .unwrap_or(false)
             }),
-
-            TurnContext::DayDiscussion => self.game.next_actor(&mut self.actor, |position| {
+            Some(TurnContext::DayDiscussion) => self.game.next_actor(&mut self.actor, |pos| {
                 self.game
-                    .player_by_position(position)
+                    .player_by_position(pos)
                     .map(|p| p.is_alive())
                     .unwrap_or(false)
             }),
-
-            TurnContext::VoteCasting => {
-                let voting = self.game.voting_mut();
-                voting
-                    .entry(self.round)
-                    .or_default()
-                    .next_actor(&mut self.actor, |_| true)
+            Some(TurnContext::VoteCasting) => self
+                .game
+                .voting_mut()
+                .entry(self.round)
+                .or_default()
+                .next_actor(&mut self.actor, |_| true),
+            Some(TurnContext::FinalSpeech(player)) => {
+                // Single actor turn
+                if self.actor.current().is_none() {
+                    self.actor.set_current(Some(player));
+                    Some(player)
+                } else {
+                    self.actor.set_completed(true);
+                    None
+                }
             }
-
-            TurnContext::VotingDiscussion => {
-                // later: Round implements Turn
-                return Ok(vec![]);
+            Some(TurnContext::SheriffCheck(player)) | Some(TurnContext::DonCheck(player)) => {
+                if self.actor.current().is_none() {
+                    self.actor.set_current(Some(player));
+                    Some(player)
+                } else {
+                    self.actor.set_completed(true);
+                    None
+                }
             }
-
-            TurnContext::Investigation => {
-                return Ok(vec![]);
+            Some(TurnContext::VotingDiscussion) => {
+                // delegate to voting module
+                None
             }
+            None => return Ok(vec![]),
         };
 
         match next {
             Some(chair) => Ok(vec![Event::ActorAdvanced { chair }]),
-            None => {
-                self.actor.set_completed(true);
-                Ok(vec![Event::TurnCompleted])
-            }
+            None => Ok(vec![Event::TurnCompleted]),
         }
     }
 

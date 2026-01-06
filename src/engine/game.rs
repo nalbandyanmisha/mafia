@@ -4,9 +4,11 @@ pub mod voting;
 
 use std::collections::HashMap;
 
-use crate::domain::{Position, Role, RoundId};
+use crate::domain::{
+    CheckPhase, DayPhase, NightPhase, Phase, Position, Role, RoundId, VotingPhase,
+};
 use crate::engine::{
-    Actor, Turn,
+    Actor, Turn, TurnContext,
     game::{player::Player, voting::Voting},
 };
 use crate::snapshot::{self, Snapshot};
@@ -102,6 +104,39 @@ impl Turn for Game {
 
         actor.set_completed(true);
         None
+    }
+
+    fn turn_context(&self, round: RoundId, phase: Phase, actor: &Actor) -> Option<TurnContext> {
+        use DayPhase::*;
+        use NightPhase::*;
+        use Phase::*;
+        use VotingPhase::*;
+
+        match phase {
+            Night(NightPhase::RoleAssignment) => Some(TurnContext::RoleAssignment),
+            Night(NightPhase::Investigation(phase)) => {
+                let actor_pos = match phase {
+                    crate::domain::CheckPhase::Sheriff => self.sheriff()?.position()?,
+                    crate::domain::CheckPhase::Don => self.don()?.position()?,
+                };
+                Some(match phase {
+                    crate::domain::CheckPhase::Sheriff => TurnContext::SheriffCheck(actor_pos),
+                    crate::domain::CheckPhase::Don => TurnContext::DonCheck(actor_pos),
+                })
+            }
+            Day(Morning) => {
+                let round = round; // implement helper to get current RoundId
+                if let Some(killed) = self.kill.get(&round) {
+                    Some(TurnContext::FinalSpeech(*killed))
+                } else {
+                    None
+                }
+            }
+            Day(Discussion) => Some(TurnContext::DayDiscussion),
+            Day(Voting(TieDiscussion)) => Some(TurnContext::VotingDiscussion),
+            Day(Voting(VoteCast)) => Some(TurnContext::VoteCasting),
+            _ => None,
+        }
     }
 }
 

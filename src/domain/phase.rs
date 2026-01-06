@@ -63,11 +63,3 @@ impl Phase {
         }
     }
 }
-
-pub enum TurnContext {
-    RoleAssignment,
-    DayDiscussion,
-    VotingDiscussion,
-    VoteCasting,
-    Investigation,
-}
