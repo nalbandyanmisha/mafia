@@ -7,11 +7,14 @@ use ratatui::{
 use crate::{
     domain::phase::Phase,
     snapshot::App,
-    tui::layout,
-    tui::widgets::{lobby, table},
+    tui::{
+        layout,
+        view::MainView,
+        widgets::{lobby, table},
+    },
 };
 
-pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, view: &MainView, app: &App) {
     let layout = layout::Main::new(area);
 
     frame.render_widget(
@@ -25,11 +28,13 @@ pub fn draw(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     match app.engine.phase {
         Phase::Lobby(_) => {
             let lobby_layout = layout::Lobby::new(layout.content);
-            lobby::draw(frame, &lobby_layout, app).unwrap();
+            let lobby_view = crate::tui::view::LobbyView::from_snapshot(app);
+            lobby::draw(frame, &lobby_layout, &lobby_view).unwrap();
         }
         _ => {
             let table_layout = layout::Table::new(layout.content, 10);
-            table::draw(frame, &table_layout, app).unwrap();
+            let table_view = crate::tui::view::TableView::from_snapshot(app);
+            table::draw(frame, &table_layout, &table_view, app).unwrap();
         }
     }
 }

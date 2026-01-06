@@ -40,7 +40,15 @@ pub fn restore_terminal() -> anyhow::Result<()> {
 pub fn draw_ui(frame: &mut Frame, app: &snapshot::App) {
     let shell = layout::Shell::new(frame.area());
 
-    main::draw(frame, shell.main, app);
-    events::draw(frame, shell.events, app);
-    command::draw(frame, shell.command, &app.input);
+    // Main content (lobby or table)
+    let main_view = view::MainView::from_snapshot(app);
+    widgets::main::draw(frame, shell.main, &main_view, app);
+
+    // Events panel
+    let events_view = view::EventsView::from_snapshot(app);
+    widgets::events::draw(frame, shell.events, &events_view);
+
+    // Command input
+    let command_view = view::CommandView::from_snapshot(app);
+    widgets::command::draw(frame, shell.command, &command_view.input);
 }
