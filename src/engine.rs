@@ -23,7 +23,6 @@ pub struct Engine {
     pub game: Game,
     pub actor: Actor,
     pub round: RoundId,
-    pub phase: Phase,
     pub state: EngineState,
 }
 
@@ -31,10 +30,14 @@ impl Snapshot for Engine {
     type Output = snapshot::Engine;
 
     fn snapshot(&self) -> Self::Output {
+        let phase = match self.state {
+            EngineState::Game(phase) => Some(phase),
+            EngineState::Lobby(_) => None,
+        };
         snapshot::Engine {
             game: self.game.snapshot(),
             actor: self.actor.snapshot(),
-            phase: self.phase,
+            phase,
             round: self.round.current(),
             state: self.state,
         }
@@ -47,7 +50,6 @@ impl Engine {
             game: Game::new(),
             actor: Actor::new(Position::new(1)),
             round: RoundId::new(0),
-            phase: Phase::Night(NightPhase::RoleAssignment),
             state: EngineState::Lobby(LobbyStatus::Waiting),
         }
     }
@@ -78,8 +80,6 @@ impl Engine {
         self.game.add_player(name);
         self.assign_position(name)?;
 
-        self.advance_phase()?;
-
         // As for now position assignment is happning simultaneously with joining,
         // this is good enough but if seprate those processes later, this logic should be updated
         if self.game.available_positions().is_empty() {
@@ -103,8 +103,6 @@ impl Engine {
         {
             self.state = EngineState::Lobby(LobbyStatus::Waiting);
         }
-
-        self.advance_phase()?;
 
         Ok(vec![Event::PlayerLeft {
             name: name.to_string(),
@@ -157,14 +155,13 @@ impl Engine {
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
         self.state = EngineState::Game(Phase::Night(NightPhase::RoleAssignment));
-        self.phase = Phase::Night(NightPhase::RoleAssignment);
         self.actor.set_start(self.first_speaker_of_day());
 
         Ok(vec![Event::GameStarted])
     }
 
     fn assign_role(&mut self, position: Position) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Night)?;
+        self.ensure_role_assignment()?;
 
         if self
             .game
@@ -189,7 +186,7 @@ impl Engine {
     }
 
     fn revoke_role(&mut self, position: Position) -> Result<Vec<Event>> {
-        self.ensure_phase(PhaseKind::Night)?;
+        self.ensure_role_assignment()?;
 
         let player = self.game.player_by_position(position).unwrap();
         self.game.return_role(player.role().unwrap());
@@ -229,7 +226,7 @@ impl Engine {
 
     fn check(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_phase(PhaseKind::Night)?;
-        match self.phase {
+        match self.phase()? {
             Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => {
                 let by = self.game.sheriff();
                 self.ensure_alive(by.unwrap().position().unwrap())?;
@@ -284,7 +281,7 @@ impl Engine {
         use Phase::*;
         use VotingPhase::*;
 
-        match self.phase {
+        match self.phase().expect("Phase retrieval failed") {
             Night(RoleAssignment) => Some(TurnContext::RoleAssignment),
             Day(Discussion) => Some(TurnContext::DayDiscussion),
             Day(Voting(TieDiscussion)) => Some(TurnContext::VotingDiscussion),
@@ -342,14 +339,14 @@ impl Engine {
         }
     }
 
-    fn next_phase(&mut self) -> Phase {
+    fn next_phase(&mut self, phase: Phase) -> Phase {
         use CheckPhase::*;
         use DayPhase::*;
         use NightPhase::*;
         use Phase::*;
         use VotingPhase::*;
 
-        match self.phase {
+        match phase {
             // -------- Night --------
             Night(RoleAssignment) => {
                 if self.actor.is_completed() {
@@ -359,7 +356,8 @@ impl Engine {
                     Night(RoleAssignment)
                 }
             }
-            Night(SheriffReveal) => Night(MafiaBriefing),
+            Night(SheriffReveal) => Night(DonReveal),
+            Night(DonReveal) => Night(MafiaBriefing),
             Night(MafiaBriefing) => {
                 if self.round.is_first() {
                     Day(Discussion)
@@ -367,10 +365,7 @@ impl Engine {
                     Night(Investigation(Sheriff))
                 }
             }
-            Night(MafiaShoot) => {
-                self.round.advance();
-                Night(Investigation(Sheriff))
-            }
+            Night(MafiaShoot) => Night(Investigation(Sheriff)),
             Night(Investigation(Sheriff)) => Night(Investigation(Don)),
             Night(Investigation(Don)) => Day(Morning),
 
@@ -393,9 +388,15 @@ impl Engine {
     }
 
     fn advance_phase(&mut self) -> Result<Vec<Event>> {
-        let next = self.next_phase();
+        let current = self.phase()?;
+        let next = self.next_phase(current);
 
-        self.phase = next;
+        if next == Phase::Night(NightPhase::MafiaShoot) {
+            // new round
+            self.round.advance();
+        };
+
+        self.set_phase(next)?;
         self.actor.reset(self.first_speaker_of_day());
 
         Ok(vec![Event::PhaseAdvanced { phase: next }])
@@ -403,6 +404,23 @@ impl Engine {
 
     fn first_speaker_of_day(&self) -> Position {
         ((self.round.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
+    }
+
+    fn phase(&self) -> Result<Phase> {
+        match self.state {
+            EngineState::Game(phase) => Ok(phase),
+            _ => bail!("Engine is not in Game state"),
+        }
+    }
+
+    fn set_phase(&mut self, phase: Phase) -> Result<()> {
+        match &mut self.state {
+            EngineState::Game(p) => {
+                *p = phase;
+                Ok(())
+            }
+            _ => bail!("Engine is not in Game state"),
+        }
     }
 
     // ------------------------------
@@ -428,10 +446,18 @@ impl Engine {
             other => bail!("Engine is not in Lobby Ready state, got {other:?}"),
         }
     }
+
+    pub fn ensure_role_assignment(&self) -> Result<()> {
+        match &self.phase()? {
+            Phase::Night(NightPhase::RoleAssignment) => Ok(()),
+            other => bail!("Engine is not in Role Assignment phase, got {other:?}"),
+        }
+    }
+
     fn ensure_phase(&self, expected: PhaseKind) -> Result<()> {
-        let actual = self.phase.kind();
-        if actual != expected {
-            bail!("Wrong phase. Expected {expected:?}, got {:?}", self.phase);
+        let phase = self.phase()?;
+        if phase.kind() != expected {
+            bail!("Wrong phase. Expected {expected:?}, got {phase:?}");
         }
         Ok(())
     }

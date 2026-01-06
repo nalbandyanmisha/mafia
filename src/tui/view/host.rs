@@ -37,7 +37,7 @@ impl HostView {
     pub fn from_snapshot(app: &App) -> Self {
         let engine = &app.engine;
 
-        let (title, title_style) = match engine.phase {
+        let (title, title_style) = match engine.phase.unwrap() {
             Phase::Day(_) => (
                 format!("Day · {}", engine.round),
                 Style::default().fg(Color::Yellow),
@@ -51,7 +51,7 @@ impl HostView {
         Self {
             title,
             title_style,
-            header: Some(build_header(engine.phase)),
+            header: Some(build_header(engine.phase.unwrap())),
             main: build_main(app),
             footer: build_footer(app),
         }
@@ -68,6 +68,7 @@ fn build_header(phase: Phase) -> HostHeader {
 
         Phase::Night(NightPhase::RoleAssignment) => ("Role Assignment", Color::Magenta),
         Phase::Night(NightPhase::SheriffReveal) => ("Sheriff Reveal", Color::Magenta),
+        Phase::Night(NightPhase::DonReveal) => ("Don Reveal", Color::Magenta),
         Phase::Night(NightPhase::MafiaBriefing) => ("Mafia Briefing", Color::Magenta),
         Phase::Night(NightPhase::MafiaShoot) => ("Mafia Shooting", Color::Magenta),
 
@@ -88,7 +89,7 @@ fn build_header(phase: Phase) -> HostHeader {
 fn build_main(app: &App) -> HostMain {
     let engine = &app.engine;
 
-    match engine.phase {
+    match engine.phase.unwrap() {
         Phase::Day(DayPhase::Morning) => HostMain {
             title: "MORNING".into(),
             subtitle: None,

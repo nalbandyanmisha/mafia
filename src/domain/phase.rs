@@ -27,6 +27,7 @@ pub enum CheckPhase {
 pub enum NightPhase {
     RoleAssignment,
     SheriffReveal,
+    DonReveal,
     MafiaBriefing,
     MafiaShoot,
     Investigation(CheckPhase),

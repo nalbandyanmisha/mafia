@@ -40,7 +40,7 @@ pub struct Game {
 #[derive(Clone, Debug)]
 pub struct Engine {
     pub game: Game,
-    pub phase: Phase,
+    pub phase: Option<Phase>,
     pub round: usize,
     pub state: EngineState,
     pub actor: Option<Position>,
