@@ -23,9 +23,18 @@ fn build_chair_frame(view: &ChairView) -> Block<'static> {
             "⬜",
         ),
         ChairState::Alive => (Style::default().fg(Color::White), "💚"),
-        ChairState::Dead => (Style::default().fg(Color::Red), "💀"),
-        ChairState::Eliminated => (Style::default().fg(Color::Red), "❌"),
-        ChairState::Removed => (Style::default().fg(Color::Red), "🚫"),
+        ChairState::Dead => (
+            Style::default().fg(Color::Red).add_modifier(Modifier::DIM),
+            "💀",
+        ),
+        ChairState::Eliminated => (
+            Style::default().fg(Color::Red).add_modifier(Modifier::DIM),
+            "❌",
+        ),
+        ChairState::Removed => (
+            Style::default().fg(Color::Red).add_modifier(Modifier::DIM),
+            "🚫",
+        ),
         ChairState::Speaking => (
             Style::default()
                 .fg(Color::Blue)
@@ -41,10 +50,12 @@ fn build_chair_frame(view: &ChairView) -> Block<'static> {
 
     let border_style = if view.highlight {
         Style::default()
-            .fg(Color::Green)
+            .fg(view.border_style)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
     };
 
     Block::default()

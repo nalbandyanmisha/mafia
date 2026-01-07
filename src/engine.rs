@@ -360,24 +360,16 @@ impl Engine {
                 .entry(self.round)
                 .or_default()
                 .next_actor(&mut self.actor, |_| true),
-            Evening(TieDiscussion) => self
-                .game
-                .voting_mut()
-                .entry(self.round)
-                .or_default()
-                .next_actor(&mut self.actor, |_| true),
-            Evening(TieVoting) => self
-                .game
-                .voting_mut()
-                .entry(self.round)
-                .or_default()
-                .next_actor(&mut self.actor, |_| true),
-            Evening(FinalVoting) => self
-                .game
-                .voting_mut()
-                .entry(self.round)
-                .or_default()
-                .next_actor(&mut self.actor, |_| true),
+            Evening(TieDiscussion) | Evening(TieVoting) | Evening(FinalVoting) => {
+                let voting = self.game.voting().get(&self.round).unwrap();
+                let tied = voting.tie_nominees().to_vec();
+
+                self.game
+                    .voting_mut()
+                    .entry(self.round)
+                    .or_default()
+                    .next_actor(&mut self.actor, |pos| tied.contains(&pos))
+            }
             Evening(FinalSpeech) => self
                 .game
                 .voting_mut()
@@ -444,9 +436,27 @@ impl Engine {
 
             // -------- Evening --------
             Evening(NominationAnnouncement) => Evening(Voting),
-            Evening(Voting) => Evening(TieDiscussion),
+            Evening(Voting) => {
+                let voting = self.game.voting().get(&self.round).unwrap();
+                let winners = voting.winners();
+
+                if winners.len() > 1 {
+                    Evening(TieDiscussion)
+                } else {
+                    Evening(FinalSpeech)
+                }
+            }
             Evening(TieDiscussion) => Evening(TieVoting),
-            Evening(TieVoting) => Evening(FinalVoting),
+            Evening(TieVoting) => {
+                let voting = self.game.voting().get(&self.round).unwrap();
+                let winners = voting.resolve_tie_vote();
+
+                if winners.len() > 1 {
+                    Evening(FinalVoting)
+                } else {
+                    Evening(FinalSpeech)
+                }
+            }
             Evening(FinalVoting) => Evening(FinalSpeech),
             Evening(FinalSpeech) => Night(MafiaShooting),
         }
@@ -455,6 +465,17 @@ impl Engine {
     fn advance_phase(&mut self) -> Result<Vec<Event>> {
         let current = self.phase()?;
         let next = self.next_phase(current);
+
+        if current == Activity::Evening(EveningActivity::FinalSpeech) {
+            let voting = self.game.voting().get(&self.round).unwrap();
+            let eliminated = voting.winners(); // one or many
+
+            for pos in eliminated {
+                if let Some(player) = self.game.player_by_position_mut(pos) {
+                    player.mark_eliminated();
+                }
+            }
+        }
 
         if next == Activity::Night(NightActivity::MafiaShooting) {
             // new round

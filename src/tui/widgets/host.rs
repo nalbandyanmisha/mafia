@@ -18,21 +18,17 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, view: &HostView) -> Result<(
         host.area,
     );
 
-    if let Some(header) = &view.header {
-        frame.render_widget(
-            Paragraph::new(header.text.clone())
-                .alignment(Alignment::Center)
-                .style(header.style),
-            host.header,
-        );
-    }
+    frame.render_widget(
+        Paragraph::new(view.header.text.clone())
+            .alignment(Alignment::Center)
+            .style(view.header.style),
+        host.header,
+    );
 
     draw_main(frame, host.body, view)?;
     draw_footer(frame, host.footer, view)?;
-
     Ok(())
 }
-
 fn draw_main(frame: &mut Frame, area: Rect, view: &HostView) -> Result<(), anyhow::Error> {
     let mut lines = vec![
         Line::from(view.main.title.clone()).style(Style::default().add_modifier(Modifier::BOLD)),

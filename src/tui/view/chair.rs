@@ -1,4 +1,6 @@
-use crate::domain::{Position, Status};
+use ratatui::style::Color;
+
+use crate::domain::{Position, Status, Time};
 use crate::tui::view::PlayerView;
 
 #[derive(Debug, Clone)]
@@ -7,6 +9,7 @@ pub struct ChairView {
     pub state: ChairState,
     pub player: Option<PlayerView>,
     pub highlight: bool,
+    pub border_style: Color,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +34,13 @@ impl ChairView {
             .iter()
             .find(|p| p.position == Some(position));
 
+        let border_style = match app.engine.phase.unwrap().time() {
+            Time::Night => Color::Magenta,
+            Time::Morning => Color::Cyan,
+            Time::Day => Color::Yellow,
+            Time::Evening => Color::Blue,
+        };
+
         let player_view = player.map(|_| PlayerView::from_snapshot(position, app));
 
         let state = match &player_view {
@@ -50,6 +60,7 @@ impl ChairView {
             state,
             player: player_view,
             highlight,
+            border_style,
         }
     }
 }
