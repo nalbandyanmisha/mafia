@@ -39,9 +39,18 @@ fn build_chair_frame(view: &ChairView) -> Block<'static> {
         ChairState::Candidate => (Style::default().fg(Color::Magenta), "🎯"),
     };
 
+    let border_style = if view.highlight {
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
+        .border_style(border_style)
         .title(format!("Chair {pos} ({icon})"))
         .title_alignment(Alignment::Center)
         .style(style)

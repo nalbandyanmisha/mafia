@@ -3,7 +3,6 @@ pub mod view;
 pub mod widgets;
 
 use crate::snapshot;
-use crate::tui::widgets::{command, events, main};
 
 use ratatui::{
     Frame, Terminal,
@@ -38,20 +37,6 @@ pub fn restore_terminal() -> anyhow::Result<()> {
 }
 
 pub fn draw_ui(frame: &mut Frame, app: &snapshot::App) {
-    // let shell = layout::Shell::new(frame.area());
-    //
-    // // Main content (lobby or table)
-    // let main_view = view::MainView::from_snapshot(app);
-    // widgets::main::draw(frame, shell.main, &main_view, app);
-    //
-    // // Events panel
-    // let events_view = view::EventsView::from_snapshot(app);
-    // widgets::events::draw(frame, shell.events, &events_view);
-    //
-    // // Command input
-    // let command_view = view::CommandView::from_snapshot(app);
-    // widgets::command::draw(frame, shell.command, &command_view.input);
-
     let layout = crate::tui::layout::ShellLayout::new(frame.area());
     let view = crate::tui::view::ShellView::new(app);
 

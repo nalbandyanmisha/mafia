@@ -1,4 +1,4 @@
-use crate::domain::{phase::Phase, position::Position, role::Role};
+use crate::domain::{Activity, Position, Role};
 
 #[derive(Debug)]
 pub enum Event {
@@ -40,7 +40,7 @@ pub enum Event {
         target: Position,
     },
     PhaseAdvanced {
-        phase: Phase,
+        phase: Activity,
     },
     NextSpeaker {
         chair: Position,

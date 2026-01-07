@@ -6,6 +6,7 @@ pub struct ChairView {
     pub position: Position,
     pub state: ChairState,
     pub player: Option<PlayerView>,
+    pub highlight: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -42,10 +43,13 @@ impl ChairView {
             },
         };
 
+        let highlight = app.engine.actor == Some(position);
+
         Self {
             position,
             state,
             player: player_view,
+            highlight,
         }
     }
 }

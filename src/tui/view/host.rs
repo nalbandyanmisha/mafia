@@ -1,6 +1,6 @@
 use crate::{
-    domain::phase::{CheckPhase, DayPhase, NightPhase, Phase, VotingPhase},
-    snapshot::{App, Check, Voting},
+    domain::{Activity, DayActivity, EveningActivity, MorningActivity, NightActivity, Time},
+    snapshot::{self, App, Check},
 };
 use ratatui::style::{Color, Modifier, Style};
 
@@ -37,14 +37,22 @@ impl HostView {
     pub fn from_snapshot(app: &App) -> Self {
         let engine = &app.engine;
 
-        let (title, title_style) = match engine.phase.unwrap() {
-            Phase::Day(_) => (
+        let (title, title_style) = match engine.phase.unwrap().time() {
+            Time::Night => (
+                format!("Night · {}", engine.round),
+                Style::default().fg(Color::Magenta),
+            ),
+            Time::Morning => (
+                format!("Morning · {}", engine.round),
+                Style::default().fg(Color::Cyan),
+            ),
+            Time::Day => (
                 format!("Day · {}", engine.round),
                 Style::default().fg(Color::Yellow),
             ),
-            Phase::Night(_) => (
-                format!("Night · {}", engine.round),
-                Style::default().fg(Color::Magenta),
+            Time::Evening => (
+                format!("Evening · {}", engine.round),
+                Style::default().fg(Color::Green),
             ),
         };
 
@@ -60,24 +68,36 @@ impl HostView {
 
 /* ---------- builders ---------- */
 
-fn build_header(phase: Phase) -> HostHeader {
+fn build_header(phase: Activity) -> HostHeader {
+    use Activity::*;
+    use DayActivity::*;
+    use EveningActivity::*;
+    use NightActivity::*;
     let (text, style) = match phase {
-        Phase::Day(DayPhase::Morning) => ("Morning", Color::Yellow),
-        Phase::Day(DayPhase::Discussion) => ("Discussion", Color::Yellow),
-        Phase::Day(DayPhase::Voting(_)) => ("Voting", Color::Yellow),
+        Night(night_activity) => match night_activity {
+            RoleAssignment => ("Role Assignment", Color::Magenta),
+            // SheriffReveal => self.game.sheriff().map(|p| p.position().unwrap()),
+            SheriffReveal => ("Sheriff Reveal", Color::Magenta),
+            DonReveal => ("Don Reveal", Color::Magenta),
+            MafiaBriefing => ("Mafia Briefing", Color::Magenta),
+            MafiaShooting => ("Mafia Shooting", Color::Magenta),
+            SheriffCheck => ("Sheriff Check", Color::Magenta),
+            DonCheck => ("Don Check", Color::Magenta),
+        },
 
-        Phase::Night(NightPhase::RoleAssignment) => ("Role Assignment", Color::Magenta),
-        Phase::Night(NightPhase::SheriffReveal) => ("Sheriff Reveal", Color::Magenta),
-        Phase::Night(NightPhase::DonReveal) => ("Don Reveal", Color::Magenta),
-        Phase::Night(NightPhase::MafiaBriefing) => ("Mafia Briefing", Color::Magenta),
-        Phase::Night(NightPhase::MafiaShoot) => ("Mafia Shooting", Color::Magenta),
+        Morning(morning_activity) => match morning_activity {
+            MorningActivity::Guessing => ("Guessing", Color::Cyan),
+            MorningActivity::FinalSpeech => ("R.I.P. Speech", Color::Cyan),
+        },
 
-        Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => {
-            ("Sheriff Checking", Color::Magenta)
-        }
-        Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => {
-            ("Don Checking", Color::Magenta)
-        }
+        Day(Discussion) => ("Discussion", Color::Yellow),
+
+        Evening(NominationAnnouncement) => ("Nomination Announcment", Color::Green),
+        Evening(Voting) => ("Voting", Color::Green),
+        Evening(TieDiscussion) => ("Tie Discussion", Color::Green),
+        Evening(TieVoting) => ("Tie Voting", Color::Green),
+        Evening(FinalVoting) => ("Final Voting", Color::Green),
+        Evening(FinalSpeech) => ("Final Speech", Color::Green),
     };
 
     HostHeader {
@@ -87,28 +107,98 @@ fn build_header(phase: Phase) -> HostHeader {
 }
 
 fn build_main(app: &App) -> HostMain {
+    use Activity::*;
+    use DayActivity::*;
+    use EveningActivity::*;
+    use NightActivity::*;
     let engine = &app.engine;
 
     match engine.phase.unwrap() {
-        Phase::Day(DayPhase::Morning) => HostMain {
-            title: "MORNING".into(),
-            subtitle: None,
-            highlight_actor: false,
+        Night(night_activity) => match night_activity {
+            RoleAssignment => HostMain {
+                title: "RoleAssignment".into(),
+                subtitle: None,
+                highlight_actor: false,
+            },
+            // SheriffReveal => self.game.sheriff().map(|p| p.position().unwrap()),
+            SheriffReveal => HostMain {
+                title: "SheriffReveal".into(),
+                subtitle: None,
+                highlight_actor: true,
+            },
+            DonReveal => HostMain {
+                title: "DonReveal".into(),
+                subtitle: None,
+                highlight_actor: true,
+            },
+            MafiaBriefing => HostMain {
+                title: "DonReveal".into(),
+                subtitle: None,
+                highlight_actor: true,
+            },
+            MafiaShooting => HostMain {
+                title: "MAFIA SHOOTING".into(),
+                subtitle: engine
+                    .game
+                    .kill
+                    .get(&engine.round)
+                    .map(|c| format!("🎯 Chair {}", c.value())),
+                highlight_actor: true,
+            },
+            SheriffCheck => HostMain {
+                title: "SHERIFF CHECKING".into(),
+                subtitle: engine
+                    .game
+                    .check
+                    .get(&engine.round)
+                    .cloned()
+                    .unwrap_or_else(Check::default)
+                    .sheriff
+                    .map(|c| format!("🎯 Chair {}", c.value())),
+                highlight_actor: true,
+            },
+
+            DonCheck => HostMain {
+                title: "DON CHECKING".into(),
+                subtitle: engine
+                    .game
+                    .check
+                    .get(&engine.round)
+                    .cloned()
+                    .unwrap_or_else(Check::default)
+                    .don
+                    .map(|c| format!("🎯 Chair {}", c.value())),
+                highlight_actor: true,
+            },
         },
 
-        Phase::Day(DayPhase::Discussion) => HostMain {
+        Morning(morning_activity) => match morning_activity {
+            MorningActivity::Guessing => HostMain {
+                title: "Guessing".into(),
+                subtitle: None,
+                highlight_actor: false,
+            },
+
+            MorningActivity::FinalSpeech => HostMain {
+                title: "Guessing".into(),
+                subtitle: None,
+                highlight_actor: false,
+            },
+        },
+
+        Day(Discussion) => HostMain {
             title: "DISCUSSION".into(),
             subtitle: engine.actor.map(|c| format!("🗣️ Chair {}", c.value())),
             highlight_actor: true,
         },
 
-        Phase::Day(DayPhase::Voting(VotingPhase::Nomination)) => {
+        Evening(NominationAnnouncement) => {
             let nominees = engine
                 .game
                 .voting
                 .get(&engine.round)
                 .cloned()
-                .unwrap_or_else(Voting::default)
+                .unwrap_or_else(snapshot::Voting::default)
                 .nominees
                 .iter()
                 .map(|c| format!("🪑{}", c.value()))
@@ -121,56 +211,29 @@ fn build_main(app: &App) -> HostMain {
                 highlight_actor: true,
             }
         }
-
-        Phase::Day(DayPhase::Voting(VotingPhase::VoteCast)) => HostMain {
+        Evening(Voting) => HostMain {
             title: "CAST YOUR VOTE".into(),
             subtitle: engine.actor.map(|c| format!("🎯 Chair {}", c.value())),
             highlight_actor: true,
         },
 
-        Phase::Night(NightPhase::RoleAssignment) => HostMain {
-            title: "ROLE REVEAL".into(),
-            subtitle: engine.actor.map(|c| format!("🎭 Chair {}", c.value())),
-            highlight_actor: true,
+        Evening(TieDiscussion) => HostMain {
+            title: "TieDiscussion".into(),
+            subtitle: None,
+            highlight_actor: false,
         },
-
-        Phase::Night(NightPhase::MafiaShoot) => HostMain {
-            title: "MAFIA SHOOTING".into(),
-            subtitle: engine
-                .game
-                .kill
-                .get(&engine.round)
-                .map(|c| format!("🎯 Chair {}", c.value())),
-            highlight_actor: true,
+        Evening(TieVoting) => HostMain {
+            title: "TieVoting".into(),
+            subtitle: None,
+            highlight_actor: false,
         },
-
-        Phase::Night(NightPhase::Investigation(CheckPhase::Sheriff)) => HostMain {
-            title: "SHERIFF CHECKING".into(),
-            subtitle: engine
-                .game
-                .check
-                .get(&engine.round)
-                .cloned()
-                .unwrap_or_else(Check::default)
-                .sheriff
-                .map(|c| format!("🎯 Chair {}", c.value())),
-            highlight_actor: true,
+        Evening(FinalVoting) => HostMain {
+            title: "FinalVoting".into(),
+            subtitle: None,
+            highlight_actor: false,
         },
-
-        Phase::Night(NightPhase::Investigation(CheckPhase::Don)) => HostMain {
-            title: "DON CHECKING".into(),
-            subtitle: engine
-                .game
-                .check
-                .get(&engine.round)
-                .cloned()
-                .unwrap_or_else(Check::default)
-                .don
-                .map(|c| format!("🎯 Chair {}", c.value())),
-            highlight_actor: true,
-        },
-        _ => HostMain {
-            title: "UNKNOWN PHASE".into(),
+        Evening(FinalSpeech) => HostMain {
+            title: "FinalVoting".into(),
             subtitle: None,
             highlight_actor: false,
         },

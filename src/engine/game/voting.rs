@@ -1,18 +1,26 @@
 use std::collections::HashMap;
 
 use crate::{
-    domain::{Phase, RoundId, position::Position},
-    engine::{Actor, Turn, TurnContext},
+    domain::position::Position,
+    engine::{Actor, Turn},
     snapshot::{self, Snapshot},
 };
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Voting {
-    /// Who nominated whom
-    /// nominator -> nominee
-    nominations: HashMap<Position, Position>,
-    nominees: Vec<Position>,
+    // nomination phase
+    nominations: HashMap<Position, Position>, // nominator -> nominee
+    nominees: Vec<Position>,                  // ordered
+
+    // first voting round
     votes: HashMap<Position, Vec<Position>>, // nominee -> voters
+
+    // tie handling
+    tie_nominees: Vec<Position>, // derived
+    tie_votes: HashMap<Position, Vec<Position>>,
+
+    // final “eliminate all?” vote
+    eliminate_each_votes: Vec<Position>,
 }
 
 impl Snapshot for Voting {
@@ -66,19 +74,6 @@ impl Turn for Voting {
         actor.set_completed(true);
         None
     }
-
-    fn turn_context(&self, round: RoundId, _phase: Phase, actor: &Actor) -> Option<TurnContext> {
-        if self.nominees.is_empty() || actor.is_completed() {
-            return None;
-        }
-
-        // Determine which nominee is active
-        if let Some(current) = actor.current() {
-            Some(TurnContext::VoteCasting)
-        } else {
-            Some(TurnContext::VotingDiscussion)
-        }
-    }
 }
 
 impl Voting {
@@ -87,6 +82,9 @@ impl Voting {
             nominations: HashMap::new(),
             nominees: Vec::new(),
             votes: HashMap::new(),
+            tie_nominees: Vec::new(),
+            tie_votes: HashMap::new(),
+            eliminate_each_votes: Vec::new(),
         }
     }
 
@@ -98,6 +96,22 @@ impl Voting {
         if !self.nominees.contains(&nominee) {
             self.nominees.push(nominee);
         }
+    }
+
+    pub fn compute_vote_results(&self) -> HashMap<Position, usize> {
+        let mut results: HashMap<Position, usize> = HashMap::new();
+        for (nominee, voters) in self.votes.iter() {
+            results.insert(*nominee, voters.len());
+        }
+        results
+    }
+
+    pub fn compute_tie_vote_results(&self) -> HashMap<Position, usize> {
+        let mut results: HashMap<Position, usize> = HashMap::new();
+        for (nominee, voters) in self.tie_votes.iter() {
+            results.insert(*nominee, voters.len());
+        }
+        results
     }
 
     pub fn record_vote(&mut self, voter: Position, nominee: Position) {
