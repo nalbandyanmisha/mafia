@@ -1,8 +1,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Time {
+pub enum Day {
     Night,
     Morning,
-    Day,
+    Noon,
     Evening,
 }
 
@@ -19,12 +19,12 @@ pub enum NightActivity {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MorningActivity {
-    FinalSpeech, // optional, single actor
+    DeathSpeech, // optional, single actor
     Guessing,    // optional, single actor, 3 guesses
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DayActivity {
+pub enum NoonActivity {
     Discussion,
 }
 
@@ -42,17 +42,68 @@ pub enum EveningActivity {
 pub enum Activity {
     Night(NightActivity),
     Morning(MorningActivity),
-    Day(DayActivity),
+    Noon(NoonActivity),
     Evening(EveningActivity),
 }
 
 impl Activity {
-    pub fn time(&self) -> Time {
+    pub fn time(&self) -> Day {
         match self {
-            Activity::Night(_) => Time::Night,
-            Activity::Morning(_) => Time::Morning,
-            Activity::Day(_) => Time::Day,
-            Activity::Evening(_) => Time::Evening,
+            Activity::Night(_) => Day::Night,
+            Activity::Morning(_) => Day::Morning,
+            Activity::Noon(_) => Day::Noon,
+            Activity::Evening(_) => Day::Evening,
         }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DayIndex(pub usize);
+
+impl DayIndex {
+    pub fn new(value: usize) -> Self {
+        DayIndex(value)
+    }
+
+    pub fn is_first(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn current(&self) -> usize {
+        self.0
+    }
+
+    pub fn next(&self) -> Self {
+        DayIndex(self.current() + 1)
+    }
+
+    pub fn previous(&self) -> Option<Self> {
+        if self.0 == 0 {
+            None
+        } else {
+            Some(DayIndex(self.current() - 1))
+        }
+    }
+
+    pub fn advance(&mut self) {
+        self.0 += 1;
+    }
+}
+
+impl std::fmt::Display for DayIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<DayIndex> for usize {
+    fn from(round_id: DayIndex) -> Self {
+        round_id.0
+    }
+}
+
+impl From<usize> for DayIndex {
+    fn from(value: usize) -> Self {
+        DayIndex(value)
     }
 }

@@ -15,24 +15,19 @@ pub use host::Host;
 pub use lobby::Lobby;
 pub use main::Main;
 pub use player::Player;
+use ratatui::layout::Rect;
 pub use shell::Shell;
 pub use table::Table;
 
 #[derive(Debug, Clone)]
-pub struct ShellLayout {
-    pub main: Main,
-    pub command: Command,
-    pub events: Events,
+pub struct Layout {
+    pub screen: Shell,
 }
 
-impl ShellLayout {
-    /// Compute the full shell layout given the terminal area
-    pub fn new(area: ratatui::layout::Rect) -> Self {
-        let shell = Shell::new(area);
+impl Layout {
+    pub fn new(area: Rect) -> Self {
         Self {
-            main: Main::new(shell.main),
-            command: Command::new(shell.command),
-            events: Events::new(shell.events),
+            screen: Shell::new(area),
         }
     }
 }

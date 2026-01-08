@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-use crate::domain::{Position, Status, Time};
+use crate::domain::{Day, Position, Status};
 use crate::tui::view::PlayerView;
 
 #[derive(Debug, Clone)]
@@ -27,6 +27,7 @@ pub enum ChairState {
 
 impl ChairView {
     pub fn from_snapshot(position: Position, app: &crate::snapshot::App) -> Self {
+        use Day::*;
         let player = app
             .engine
             .game
@@ -35,10 +36,10 @@ impl ChairView {
             .find(|p| p.position == Some(position));
 
         let border_style = match app.engine.phase.unwrap().time() {
-            Time::Night => Color::Magenta,
-            Time::Morning => Color::Cyan,
-            Time::Day => Color::Yellow,
-            Time::Evening => Color::Blue,
+            Night => Color::Magenta,
+            Morning => Color::Cyan,
+            Noon => Color::Yellow,
+            Evening => Color::Blue,
         };
 
         let player_view = player.map(|_| PlayerView::from_snapshot(position, app));

@@ -10,8 +10,8 @@ use turn::Turn;
 use self::{commands::Command, events::Event, game::Game};
 use crate::{
     domain::{
-        Activity, DayActivity, EngineState, EveningActivity, LobbyStatus, MorningActivity,
-        NightActivity, Position, RoundId, Time,
+        Activity, Day, DayIndex, EngineState, EveningActivity, LobbyStatus, MorningActivity,
+        NightActivity, NoonActivity, Position,
     },
     snapshot::{self, Snapshot},
 };
@@ -22,7 +22,7 @@ use rand::prelude::*;
 pub struct Engine {
     pub game: Game,
     pub actor: Actor,
-    pub round: RoundId,
+    pub day: DayIndex,
     pub state: EngineState,
 }
 
@@ -38,7 +38,7 @@ impl Snapshot for Engine {
             game: self.game.snapshot(),
             actor: self.actor.snapshot(),
             phase,
-            round: self.round.current(),
+            day: self.day.current(),
             state: self.state,
         }
     }
@@ -49,7 +49,7 @@ impl Engine {
         Engine {
             game: Game::new(),
             actor: Actor::new(Position::new(1)),
-            round: RoundId::new(0),
+            day: DayIndex::new(0),
             state: EngineState::Lobby(LobbyStatus::Waiting),
         }
     }
@@ -220,7 +220,7 @@ impl Engine {
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
         player.mark_dead();
-        self.game.record_mafia_kill(self.round, target)?;
+        self.game.record_mafia_kill(self.day, target)?;
         Ok(vec![Event::PlayerKilled { target }])
     }
 
@@ -233,7 +233,7 @@ impl Engine {
                     .ok_or_else(|| anyhow::anyhow!("No active actor"))?;
                 self.ensure_alive(by)?;
                 self.ensure_alive(target)?;
-                self.game.record_sheriff_check(self.round, target)?;
+                self.game.record_sheriff_check(self.day, target)?;
             }
             Activity::Night(NightActivity::DonCheck) => {
                 let by = self
@@ -242,7 +242,7 @@ impl Engine {
                     .ok_or_else(|| anyhow::anyhow!("No active actor"))?;
                 self.ensure_alive(by)?;
                 self.ensure_alive(target)?;
-                self.game.record_don_check(self.round, target)?;
+                self.game.record_don_check(self.day, target)?;
             }
             _ => bail!("Not in investigation phase"),
         };
@@ -259,7 +259,7 @@ impl Engine {
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
 
-        self.game.add_nomination(self.round, by, target)?;
+        self.game.add_nomination(self.day, by, target)?;
         Ok(vec![Event::PlayerNominated { by, target }])
     }
 
@@ -274,7 +274,7 @@ impl Engine {
 
         for &voter in &voters {
             self.ensure_alive(voter)?;
-            self.game.add_vote(self.round, voter, nominee)?;
+            self.game.add_vote(self.day, voter, nominee)?;
         }
 
         Ok(vec![])
@@ -284,7 +284,7 @@ impl Engine {
         let voting = self
             .game
             .voting()
-            .get(&self.round)
+            .get(&self.day)
             .ok_or_else(|| anyhow::anyhow!("No voting data for current round"))?;
 
         voting.compute_vote_results();
@@ -293,11 +293,12 @@ impl Engine {
 
     pub fn advance_actor(&mut self) -> Result<Vec<Event>> {
         use Activity::*;
-        use DayActivity::*;
         use EveningActivity::*;
+        use MorningActivity::*;
         use NightActivity::*;
+        use NoonActivity::*;
 
-        let killed_player = self.game.get_kill(self.round).cloned();
+        let killed_player = self.game.get_kill(self.day).cloned();
 
         let next = match self.phase()? {
             Night(night_activity) => match night_activity {
@@ -342,11 +343,11 @@ impl Engine {
             },
 
             Morning(morning_activity) => match morning_activity {
-                MorningActivity::Guessing => self.single_actor(killed_player),
-                MorningActivity::FinalSpeech => self.single_actor(killed_player),
+                Guessing => self.single_actor(killed_player),
+                DeathSpeech => self.single_actor(killed_player),
             },
 
-            Day(Discussion) => self.game.next_actor(&mut self.actor, |pos| {
+            Noon(Discussion) => self.game.next_actor(&mut self.actor, |pos| {
                 self.game
                     .player_by_position(pos)
                     .map(|p| p.is_alive())
@@ -357,23 +358,23 @@ impl Engine {
             Evening(Voting) => self
                 .game
                 .voting_mut()
-                .entry(self.round)
+                .entry(self.day)
                 .or_default()
                 .next_actor(&mut self.actor, |_| true),
             Evening(TieDiscussion) | Evening(TieVoting) | Evening(FinalVoting) => {
-                let voting = self.game.voting().get(&self.round).unwrap();
+                let voting = self.game.voting().get(&self.day).unwrap();
                 let tied = voting.tie_nominees().to_vec();
 
                 self.game
                     .voting_mut()
-                    .entry(self.round)
+                    .entry(self.day)
                     .or_default()
                     .next_actor(&mut self.actor, |pos| tied.contains(&pos))
             }
             Evening(FinalSpeech) => self
                 .game
                 .voting_mut()
-                .entry(self.round)
+                .entry(self.day)
                 .or_default()
                 .next_actor(&mut self.actor, |_| true),
         };
@@ -400,9 +401,10 @@ impl Engine {
 
     fn next_phase(&mut self, phase: Activity) -> Activity {
         use Activity::*;
-        use DayActivity::*;
         use EveningActivity::*;
+        use MorningActivity::*;
         use NightActivity::*;
+        use NoonActivity::*;
 
         match phase {
             // -------- Night --------
@@ -417,27 +419,27 @@ impl Engine {
             Night(SheriffReveal) => Night(DonReveal),
             Night(DonReveal) => Night(MafiaBriefing),
             Night(MafiaBriefing) => {
-                if self.round.is_first() {
-                    Day(Discussion)
+                if self.day.is_first() {
+                    Noon(Discussion)
                 } else {
                     Night(SheriffCheck)
                 }
             }
             Night(MafiaShooting) => Night(SheriffCheck),
             Night(SheriffCheck) => Night(DonCheck),
-            Night(DonCheck) => Morning(MorningActivity::Guessing),
+            Night(DonCheck) => Morning(Guessing),
 
             // -------- Morning --------
-            Morning(MorningActivity::Guessing) => Morning(MorningActivity::FinalSpeech),
-            Morning(MorningActivity::FinalSpeech) => Day(Discussion),
+            Morning(Guessing) => Morning(DeathSpeech),
+            Morning(DeathSpeech) => Noon(Discussion),
 
             // -------- Day --------
-            Day(Discussion) => Evening(NominationAnnouncement),
+            Noon(Discussion) => Evening(NominationAnnouncement),
 
             // -------- Evening --------
             Evening(NominationAnnouncement) => Evening(Voting),
             Evening(Voting) => {
-                let voting = self.game.voting().get(&self.round).unwrap();
+                let voting = self.game.voting().get(&self.day).unwrap();
                 let winners = voting.winners();
 
                 if winners.len() > 1 {
@@ -448,7 +450,7 @@ impl Engine {
             }
             Evening(TieDiscussion) => Evening(TieVoting),
             Evening(TieVoting) => {
-                let voting = self.game.voting().get(&self.round).unwrap();
+                let voting = self.game.voting().get(&self.day).unwrap();
                 let winners = voting.resolve_tie_vote();
 
                 if winners.len() > 1 {
@@ -467,7 +469,7 @@ impl Engine {
         let next = self.next_phase(current);
 
         if current == Activity::Evening(EveningActivity::FinalSpeech) {
-            let voting = self.game.voting().get(&self.round).unwrap();
+            let voting = self.game.voting().get(&self.day).unwrap();
             let eliminated = voting.winners(); // one or many
 
             for pos in eliminated {
@@ -479,7 +481,7 @@ impl Engine {
 
         if next == Activity::Night(NightActivity::MafiaShooting) {
             // new round
-            self.round.advance();
+            self.day.advance();
         };
 
         self.set_phase(next)?;
@@ -489,7 +491,7 @@ impl Engine {
     }
 
     fn first_speaker_of_day(&self) -> Position {
-        ((self.round.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
+        ((self.day.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
     }
 
     fn phase(&self) -> Result<Activity> {
@@ -568,19 +570,19 @@ impl Engine {
 
     pub fn ensure_discussion(&self) -> Result<()> {
         match &self.phase()? {
-            Activity::Day(DayActivity::Discussion) => Ok(()),
+            Activity::Noon(NoonActivity::Discussion) => Ok(()),
             other => bail!("Engine is not in Discussion phase, got {other:?}"),
         }
     }
 
     pub fn ensure_evening(&self) -> Result<()> {
         match &self.phase()?.time() {
-            Time::Evening => Ok(()),
+            Day::Evening => Ok(()),
             other => bail!("Engine is not in Voting phase, got {other:?}"),
         }
     }
 
-    fn ensure_phase(&self, expected: Time) -> Result<()> {
+    fn ensure_phase(&self, expected: Day) -> Result<()> {
         let phase = self.phase()?;
         if phase.time() != expected {
             bail!("Wrong phase. Expected {expected:?}, got {phase:?}");

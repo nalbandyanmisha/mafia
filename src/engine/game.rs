@@ -4,7 +4,7 @@ pub mod voting;
 
 use std::collections::HashMap;
 
-use crate::domain::{Position, Role, RoundId};
+use crate::domain::{DayIndex, Position, Role};
 use crate::engine::{
     Actor, Turn,
     game::{player::Player, voting::Voting},
@@ -26,9 +26,9 @@ pub enum Error {
 #[derive(Debug, Clone)]
 pub struct Game {
     players: Vec<Player>,
-    voting: HashMap<RoundId, voting::Voting>,
-    check: HashMap<RoundId, check::Check>,
-    kill: HashMap<RoundId, Position>,
+    voting: HashMap<DayIndex, voting::Voting>,
+    check: HashMap<DayIndex, check::Check>,
+    kill: HashMap<DayIndex, Position>,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
 }
@@ -114,7 +114,6 @@ impl Game {
         let voting = HashMap::new();
         let check = HashMap::new();
         let kill = HashMap::new();
-        let round = 0;
 
         for pos in 1..=Self::PLAYER_COUNT {
             positions_pool.push(Position::new(pos));
@@ -147,54 +146,54 @@ impl Game {
 
     pub fn add_nomination(
         &mut self,
-        round: RoundId,
+        day: DayIndex,
         nominator: Position,
         nominee: Position,
     ) -> Result<(), Error> {
-        let voting = self.voting.entry(round).or_default();
+        let voting = self.voting.entry(day).or_default();
         voting.record_nomination(nominator, nominee);
         Ok(())
     }
 
     pub fn add_vote(
         &mut self,
-        round: RoundId,
+        day: DayIndex,
         voter: Position,
         nominee: Position,
     ) -> Result<(), Error> {
-        let voting = self.voting.entry(round).or_default();
+        let voting = self.voting.entry(day).or_default();
         voting.record_vote(voter, nominee);
         Ok(())
     }
 
-    pub fn voting(&self) -> &HashMap<RoundId, Voting> {
+    pub fn voting(&self) -> &HashMap<DayIndex, Voting> {
         &self.voting
     }
 
-    pub fn voting_mut(&mut self) -> &mut HashMap<RoundId, Voting> {
+    pub fn voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
         &mut self.voting
     }
 
     /*---------------- Checks ---------------- */
-    pub fn record_sheriff_check(&mut self, round: RoundId, checked: Position) -> Result<(), Error> {
-        let check = self.check.entry(round).or_default();
+    pub fn record_sheriff_check(&mut self, day: DayIndex, checked: Position) -> Result<(), Error> {
+        let check = self.check.entry(day).or_default();
         check.record_sheriff_check(checked);
         Ok(())
     }
 
-    pub fn record_don_check(&mut self, round: RoundId, checked: Position) -> Result<(), Error> {
-        let check = self.check.entry(round).or_default();
+    pub fn record_don_check(&mut self, day: DayIndex, checked: Position) -> Result<(), Error> {
+        let check = self.check.entry(day).or_default();
         check.record_don_check(checked);
         Ok(())
     }
 
-    pub fn record_mafia_kill(&mut self, round: RoundId, killed: Position) -> Result<(), Error> {
-        self.kill.insert(round, killed);
+    pub fn record_mafia_kill(&mut self, day: DayIndex, killed: Position) -> Result<(), Error> {
+        self.kill.insert(day, killed);
         Ok(())
     }
 
-    pub fn get_kill(&self, round: RoundId) -> Option<&Position> {
-        self.kill.get(&round)
+    pub fn get_kill(&self, day: DayIndex) -> Option<&Position> {
+        self.kill.get(&day)
     }
 
     // ---------------- Players ----------------

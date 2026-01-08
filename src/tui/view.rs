@@ -5,6 +5,7 @@ pub mod host;
 pub mod lobby;
 pub mod main;
 pub mod player;
+pub mod shell;
 pub mod table;
 
 pub use chair::ChairView;
@@ -14,22 +15,19 @@ pub use host::HostView;
 pub use lobby::LobbyView;
 pub use main::MainView;
 pub use player::PlayerView;
+pub use shell::Shell;
 pub use table::TableView;
 
 #[derive(Debug, Clone)]
-pub struct ShellView {
-    pub main: MainView,
-    pub command: CommandView,
-    pub events: EventsView,
+pub struct View {
+    pub screen: Shell,
 }
 
-impl ShellView {
+impl View {
     /// Compute the views from the snapshot
     pub fn new(app: &crate::snapshot::App) -> Self {
         Self {
-            main: MainView::from_snapshot(app),
-            command: CommandView::from_snapshot(app),
-            events: EventsView::from_snapshot(app),
+            screen: Shell::new(app),
         }
     }
 }

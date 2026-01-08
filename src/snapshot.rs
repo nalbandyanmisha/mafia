@@ -41,7 +41,7 @@ pub struct Game {
 pub struct Engine {
     pub game: Game,
     pub phase: Option<Activity>,
-    pub round: usize,
+    pub day: usize,
     pub state: EngineState,
     pub actor: Option<Position>,
 }

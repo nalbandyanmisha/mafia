@@ -6,7 +6,6 @@ mod tui;
 
 use app::{App, AppStatus, events::Event as AppEvent};
 use snapshot::Snapshot;
-use tui::draw_ui;
 
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use std::time::Duration;
@@ -67,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             _ = tick_interval.tick() => {
-                terminal.draw(|f| draw_ui(f, &app.snapshot())).unwrap();
+                terminal.draw(|f| tui::draw(f, &app.snapshot())).unwrap();
             }
         }
     }
@@ -75,4 +74,3 @@ async fn main() -> anyhow::Result<()> {
     tui::restore_terminal()?;
     Ok(())
 }
-

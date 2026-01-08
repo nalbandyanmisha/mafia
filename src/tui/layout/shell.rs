@@ -1,14 +1,16 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 
+use super::{Command, Events, Main};
+
 #[derive(Debug, Clone)]
 pub struct Shell {
-    pub main: Rect,
-    pub command: Rect,
-    pub events: Rect,
+    pub main: Main,
+    pub command: Command,
+    pub events: Events,
 }
 
 impl Shell {
-    /// Create a ShellLayout from a given area
+    /// Compute the full shell layout given the terminal area
     pub fn new(area: Rect) -> Self {
         let [left, events] =
             Layout::horizontal([Constraint::Percentage(75), Constraint::Percentage(25)])
@@ -19,9 +21,9 @@ impl Shell {
             Layout::vertical([Constraint::Min(10), Constraint::Length(3)]).areas(left);
 
         Self {
-            main,
-            command,
-            events,
+            main: Main::new(main),
+            command: Command::new(command),
+            events: Events::new(events),
         }
     }
 }
