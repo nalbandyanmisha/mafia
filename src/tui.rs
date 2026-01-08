@@ -42,5 +42,5 @@ pub fn draw(frame: &mut Frame, app: &snapshot::App) {
     let layout = Layout::new(frame.area());
     let view = View::new(app);
 
-    crate::tui::widgets::draw(frame, &layout, &view, app);
+    crate::tui::widgets::draw(frame, &layout, &view);
 }

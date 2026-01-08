@@ -1,4 +1,4 @@
-use crate::snapshot::App;
+use crate::snapshot;
 use crate::tui::view::{ChairView, HostView};
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub struct TableView {
 }
 
 impl TableView {
-    pub fn from_snapshot(app: &App) -> Self {
+    pub fn from_snapshot(app: &snapshot::App) -> Self {
         let host = HostView::from_snapshot(app);
 
         let chairs = (1u8..=10) // or Game::PLAYER_COUNT if exposed
@@ -21,4 +21,3 @@ impl TableView {
         Self { host, chairs }
     }
 }
-

@@ -1,6 +1,6 @@
 use crate::{
     domain::{EngineState, LobbyStatus},
-    snapshot::App,
+    snapshot,
 };
 
 #[derive(Debug, Clone)]
@@ -20,7 +20,7 @@ pub struct LobbyPlayerView {
 }
 
 impl LobbyView {
-    pub fn from_snapshot(app: &App) -> Self {
+    pub fn from_snapshot(app: &snapshot::App) -> Self {
         let title = match app.engine.state {
             EngineState::Lobby(LobbyStatus::Waiting) => "Waiting",
             EngineState::Lobby(LobbyStatus::Ready) => "Ready",

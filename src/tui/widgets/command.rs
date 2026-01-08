@@ -6,12 +6,7 @@ use ratatui::{
 
 use crate::tui::{layout, view};
 
-pub fn draw(
-    frame: &mut Frame,
-    layout: &layout::Command,
-    view: &view::CommandView,
-    app: &crate::snapshot::App,
-) {
+pub fn draw(frame: &mut Frame, layout: &layout::Command, view: &view::CommandView) {
     let layout = layout::Command::new(layout.area);
 
     frame.render_widget(

@@ -1,7 +1,5 @@
-use crate::{
-    domain::{Activity, Day, EveningActivity, MorningActivity, NightActivity, NoonActivity},
-    snapshot::{self, App},
-};
+use crate::domain::{Activity, Day, EveningActivity, MorningActivity, NightActivity, NoonActivity};
+use crate::snapshot;
 use ratatui::style::{Color, Modifier, Style};
 
 #[derive(Debug, Clone)]
@@ -64,7 +62,7 @@ fn format_votes_verbose(voting: &snapshot::Voting) -> String {
 }
 
 impl HostView {
-    pub fn from_snapshot(app: &App) -> Self {
+    pub fn from_snapshot(app: &snapshot::App) -> Self {
         use Day::*;
         let engine = &app.engine;
         let phase = engine.phase.expect("phase must exist");
@@ -131,7 +129,7 @@ fn build_header(activity: Activity) -> HostHeader {
 
 /* ---------------- Main ---------------- */
 
-fn build_main(app: &App) -> HostMain {
+fn build_main(app: &snapshot::App) -> HostMain {
     use Activity::*;
     use EveningActivity::*;
     use MorningActivity::*;
@@ -251,7 +249,7 @@ fn build_main(app: &App) -> HostMain {
 
 /* ---------------- Footer ---------------- */
 
-fn build_footer(app: &App) -> HostFooter {
+fn build_footer(app: &snapshot::App) -> HostFooter {
     match app.current_timer {
         Some(sec) => {
             let style = if sec <= 10 {

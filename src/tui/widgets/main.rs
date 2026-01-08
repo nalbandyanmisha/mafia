@@ -4,17 +4,13 @@ use ratatui::{
     widgets::{Block, Borders},
 };
 
-use crate::{
-    domain::EngineState,
-    snapshot::App,
-    tui::{
-        layout,
-        view::MainView,
-        widgets::{lobby, table},
-    },
+use crate::tui::{
+    layout,
+    view::MainView,
+    widgets::{lobby, table},
 };
 
-pub fn draw(frame: &mut Frame, layout: &layout::Main, view: &MainView, app: &App) {
+pub fn draw(frame: &mut Frame, layout: &layout::Main, view: &MainView) {
     frame.render_widget(
         Block::default()
             .borders(Borders::ALL)
@@ -23,16 +19,14 @@ pub fn draw(frame: &mut Frame, layout: &layout::Main, view: &MainView, app: &App
         layout.area,
     );
 
-    match app.engine.state {
-        EngineState::Lobby(_) => {
+    match view {
+        MainView::Lobby(lobby_view) => {
             let lobby_layout = layout::Lobby::new(layout.content);
-            let lobby_view = crate::tui::view::LobbyView::from_snapshot(app);
-            lobby::draw(frame, &lobby_layout, &lobby_view).unwrap();
+            lobby::draw(frame, &lobby_layout, lobby_view).unwrap();
         }
-        _ => {
+        MainView::Table(table_view) => {
             let table_layout = layout::Table::new(layout.content, 10);
-            let table_view = crate::tui::view::TableView::from_snapshot(app);
-            table::draw(frame, &table_layout, &table_view, app).unwrap();
+            table::draw(frame, &table_layout, table_view).unwrap();
         }
     }
 }

@@ -11,8 +11,8 @@ use ratatui::Frame;
 
 use super::{layout::Layout, view::View};
 
-pub fn draw(frame: &mut Frame, terminal: &Layout, data: &View, app: &crate::snapshot::App) {
-    main::draw(frame, &terminal.screen.main, &data.screen.main, app);
-    command::draw(frame, &terminal.screen.command, &data.screen.command, app);
-    events::draw(frame, &terminal.screen.events, &data.screen.events, app);
+pub fn draw(frame: &mut Frame, terminal: &Layout, data: &View) {
+    main::draw(frame, &terminal.screen.main, &data.screen.main);
+    command::draw(frame, &terminal.screen.command, &data.screen.command);
+    events::draw(frame, &terminal.screen.events, &data.screen.events);
 }

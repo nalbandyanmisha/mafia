@@ -1,5 +1,6 @@
 use crate::{
     domain::EngineState,
+    snapshot,
     tui::view::{LobbyView, TableView},
 };
 
@@ -10,7 +11,7 @@ pub enum MainView {
 }
 
 impl MainView {
-    pub fn from_snapshot(app: &crate::snapshot::App) -> Self {
+    pub fn from_snapshot(app: &snapshot::App) -> Self {
         match app.engine.state {
             EngineState::Lobby(_) => MainView::Lobby(LobbyView::from_snapshot(app)),
             _ => MainView::Table(TableView::from_snapshot(app)),
