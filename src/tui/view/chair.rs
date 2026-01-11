@@ -35,7 +35,7 @@ impl ChairView {
             .iter()
             .find(|p| p.position == Some(position));
 
-        let border_style = match app.engine.phase.unwrap().time() {
+        let border_style = match app.engine.phase.unwrap().daytime() {
             Night => Color::Magenta,
             Morning => Color::Cyan,
             Noon => Color::Yellow,

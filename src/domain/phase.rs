@@ -47,7 +47,7 @@ pub enum Activity {
 }
 
 impl Activity {
-    pub fn time(&self) -> Day {
+    pub fn daytime(&self) -> Day {
         match self {
             Activity::Night(_) => Day::Night,
             Activity::Morning(_) => Day::Morning,
@@ -67,6 +67,10 @@ impl DayIndex {
 
     pub fn is_first(&self) -> bool {
         self.0 == 0
+    }
+
+    pub fn is_second(&self) -> bool {
+        self.0 == 1
     }
 
     pub fn current(&self) -> usize {

@@ -79,8 +79,8 @@ impl App {
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
 
-            AdvanceActor => {
-                let _ = self.engine.apply(EngineCommand::AdvanceActor);
+            Advance => {
+                let _ = self.engine.apply(EngineCommand::Advance);
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
 
@@ -130,16 +130,6 @@ impl App {
                 });
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
-            Next(subcommand) => match subcommand {
-                commands::NextCommand::Phase => {
-                    let _ = self.engine.apply(EngineCommand::NextPhase);
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
-                commands::NextCommand::Actor => {
-                    let _ = self.engine.apply(EngineCommand::AdvanceActor);
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-                }
-            },
             Assign(subcommand) => match subcommand {
                 commands::AssignCommand::Player { name } => {
                     let _ = self.engine.apply(EngineCommand::Join { name });

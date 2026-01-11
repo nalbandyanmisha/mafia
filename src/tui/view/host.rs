@@ -67,7 +67,7 @@ impl HostView {
         let engine = &app.engine;
         let phase = engine.phase.expect("phase must exist");
 
-        let (title, title_style) = match phase.time() {
+        let (title, title_style) = match phase.daytime() {
             Night => (format!("🌙 Night · {}", engine.day), Color::Magenta),
             Morning => (format!("☀ Morning · {}", engine.day), Color::Cyan),
             Noon => (format!("☀ Day · {}", engine.day), Color::Yellow),
@@ -217,7 +217,7 @@ fn build_main(app: &snapshot::App) -> HostMain {
                 }
             }
 
-            Voting | TieVoting | FinalVoting => {
+            Voting => {
                 let voting = engine
                     .game
                     .voting
@@ -237,6 +237,41 @@ fn build_main(app: &snapshot::App) -> HostMain {
                 subtitle: engine.actor.map(|p| format!("🗣 Chair {}", p.value())),
                 highlight_actor: true,
             },
+
+            TieVoting => {
+                let voting = engine
+                    .game
+                    .tie_voting
+                    .get(&engine.day)
+                    .cloned()
+                    .unwrap_or_else(snapshot::Voting::default);
+                HostMain {
+                    title: "CAST YOUR VOTE".into(),
+                    subtitle: Some(format_votes_verbose(&voting)),
+                    highlight_actor: true,
+                }
+            }
+
+            FinalVoting => {
+                let final_votes = engine
+                    .game
+                    .final_voting
+                    .get(&engine.day)
+                    .cloned()
+                    .unwrap_or_default();
+
+                let votes_str = final_votes
+                    .iter()
+                    .map(|p| format!("🪑{}", p.value()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                HostMain {
+                    title: "FINAL VOTE".into(),
+                    subtitle: Some(format!("Votes: {votes_str}")),
+                    highlight_actor: true,
+                }
+            }
 
             FinalSpeech => HostMain {
                 title: "Final speech".into(),

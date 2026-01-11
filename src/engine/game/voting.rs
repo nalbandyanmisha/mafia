@@ -8,19 +8,9 @@ use crate::{
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Voting {
-    // nomination phase
     nominations: HashMap<Position, Position>, // nominator -> nominee
     nominees: Vec<Position>,                  // ordered
-
-    // first voting round
-    votes: HashMap<Position, Vec<Position>>, // nominee -> voters
-
-    // tie handling
-    tie_nominees: Vec<Position>, // derived
-    tie_votes: HashMap<Position, Vec<Position>>,
-
-    // final “eliminate all?” vote
-    eliminate_each_votes: Vec<Position>,
+    votes: HashMap<Position, Vec<Position>>,  // nominee -> voters
 }
 
 impl Snapshot for Voting {
@@ -53,25 +43,45 @@ impl Turn for Voting {
     where
         F: Fn(Position) -> bool,
     {
-        if self.nominees.is_empty() || actor.is_completed() {
+        if actor.is_completed() {
             return None;
         }
 
-        let start_idx = actor
-            .current()
-            .and_then(|c| self.nominees.iter().position(|&x| x == c))
-            .map(|i| i + 1)
-            .unwrap_or(0);
-
-        for i in start_idx..self.nominees.len() {
-            let chair = self.nominees[i];
-            if is_eligible(chair) {
-                actor.set_current(Some(chair));
-                return Some(chair);
-            }
+        if self.nominees.is_empty() {
+            actor.mark_completed();
+            return None;
         }
 
-        actor.set_completed(true);
+        let start = actor.start();
+
+        // First call
+        if actor.current().is_none() && is_eligible(start) {
+            actor.set_current(Some(start));
+            return Some(start);
+        }
+
+        let current = actor.current().unwrap_or(start);
+        let start_idx = self.nominees.iter().position(|&p| p == current)?;
+
+        for i in 1..=self.nominees.len() {
+            let idx = (start_idx + i) % self.nominees.len();
+            let pos = self.nominees[idx];
+
+            if !is_eligible(pos) {
+                continue;
+            }
+
+            // looped back → finished
+            if pos == start && actor.current().is_some() {
+                actor.mark_completed();
+                return None;
+            }
+
+            actor.set_current(Some(pos));
+            return Some(pos);
+        }
+
+        actor.mark_completed();
         None
     }
 }
@@ -82,9 +92,14 @@ impl Voting {
             nominations: HashMap::new(),
             nominees: Vec::new(),
             votes: HashMap::new(),
-            tie_nominees: Vec::new(),
-            tie_votes: HashMap::new(),
-            eliminate_each_votes: Vec::new(),
+        }
+    }
+
+    pub fn from_nominees(nominees: &[Position]) -> Self {
+        Self {
+            nominations: HashMap::new(),
+            nominees: nominees.to_vec(),
+            votes: HashMap::new(),
         }
     }
 
@@ -99,7 +114,10 @@ impl Voting {
     }
 
     pub fn record_vote(&mut self, voter: Position, nominee: Position) {
-        self.votes.entry(nominee).or_default().push(voter);
+        let voters = self.votes.entry(nominee).or_default();
+        if !voters.contains(&voter) {
+            voters.push(voter);
+        }
     }
 
     pub fn compute_vote_results(&self) -> HashMap<Position, usize> {
@@ -108,19 +126,6 @@ impl Voting {
             results.insert(*nominee, voters.len());
         }
         results
-    }
-
-    pub fn compute_tie_vote_results(&self) -> HashMap<Position, usize> {
-        let mut results: HashMap<Position, usize> = HashMap::new();
-        for (nominee, voters) in self.tie_votes.iter() {
-            results.insert(*nominee, voters.len());
-        }
-        results
-    }
-
-    pub fn clear_actor_state(&mut self, actor: &mut Actor) {
-        actor.set_current(None);
-        actor.set_completed(false);
     }
 
     pub fn winners(&self) -> Vec<Position> {
@@ -138,30 +143,12 @@ impl Voting {
             .collect()
     }
 
-    pub fn tie_nominees(&self) -> &[Position] {
-        &self.tie_nominees
+    pub fn has_nominees(&self) -> bool {
+        self.nominees.len() > 0
     }
 
-    pub fn resolve_initial_vote(&mut self) -> Vec<Position> {
-        let winners = self.winners();
-        if winners.len() > 1 {
-            self.tie_nominees = winners.clone();
-        }
-        winners
-    }
-
-    pub fn resolve_tie_vote(&self) -> Vec<Position> {
-        let results = self.compute_tie_vote_results();
-        if results.is_empty() {
-            return vec![];
-        }
-
-        let max = results.values().copied().max().unwrap_or(0);
-        results
-            .into_iter()
-            .filter(|(_, c)| *c == max)
-            .map(|(p, _)| p)
-            .collect()
+    pub fn nominee_count(&self) -> usize {
+        self.nominees.len()
     }
 
     pub fn get_nominations(&self) -> &HashMap<Position, Position> {

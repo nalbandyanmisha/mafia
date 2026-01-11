@@ -15,7 +15,7 @@ use crate::{
     },
     snapshot::{self, Snapshot},
 };
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use rand::prelude::*;
 
 #[derive(Debug)]
@@ -60,8 +60,7 @@ impl Engine {
             Command::Start => self.start(),
             Command::AssignRole => self.assign_role(self.actor.current().unwrap()),
             Command::RevokeRole => self.revoke_role(self.actor.current().unwrap()),
-            Command::AdvanceActor => self.advance_actor(),
-            Command::NextPhase => self.advance_phase(),
+            Command::Advance => self.advance(),
             Command::Warn { target } => self.warn(target),
             Command::Pardon { target } => self.pardon(target),
             Command::Nominate { target } => self.nominate(target),
@@ -155,7 +154,7 @@ impl Engine {
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
         self.state = EngineState::Game(Activity::Night(NightActivity::RoleAssignment));
-        self.actor.set_start(self.first_speaker_of_day());
+        self.actor.reset(self.first_speaker_of_day());
 
         Ok(vec![Event::GameStarted])
     }
@@ -264,142 +263,456 @@ impl Engine {
     }
 
     fn vote(&mut self, voters: Vec<Position>) -> Result<Vec<Event>> {
-        self.ensure_evening()?;
+        let phase = self.phase()?;
 
-        let nominee = self
-            .actor
-            .current()
-            .ok_or_else(|| anyhow::anyhow!("No active speaker"))?;
-        self.ensure_alive(nominee)?;
+        match phase {
+            // ---------- FIRST VOTING ----------
+            Activity::Evening(EveningActivity::Voting) => {
+                let nominee = self
+                    .actor
+                    .current()
+                    .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
+                let voting = self.game.voting_mut().entry(self.day).or_default();
 
-        for &voter in &voters {
-            self.ensure_alive(voter)?;
-            self.game.add_vote(self.day, voter, nominee)?;
+                for voter in voters {
+                    voting.record_vote(voter, nominee);
+                }
+            }
+
+            // ---------- TIE VOTING ----------
+            Activity::Evening(EveningActivity::TieVoting) => {
+                let nominee = self
+                    .actor
+                    .current()
+                    .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
+                let voting = self.game.tie_voting_mut().entry(self.day).or_default();
+
+                for voter in voters {
+                    voting.record_vote(voter, nominee);
+                }
+            }
+
+            // ---------- FINAL YES / NO ----------
+            Activity::Evening(EveningActivity::FinalVoting) => {
+                let yes_votes = self.game.final_voting_mut().entry(self.day).or_default();
+
+                for voter in voters {
+                    yes_votes.push(voter);
+                }
+            }
+
+            _ => bail!("Not in a voting phase"),
         }
 
         Ok(vec![])
     }
 
-    fn vote_result(&self) -> Result<(), anyhow::Error> {
-        let voting = self
-            .game
-            .voting()
-            .get(&self.day)
-            .ok_or_else(|| anyhow::anyhow!("No voting data for current round"))?;
-
-        voting.compute_vote_results();
-        Ok(())
-    }
-
-    pub fn advance_actor(&mut self) -> Result<Vec<Event>> {
+    fn advance(&mut self) -> Result<Vec<Event>> {
         use Activity::*;
         use EveningActivity::*;
         use MorningActivity::*;
         use NightActivity::*;
         use NoonActivity::*;
 
-        let killed_player = self.game.get_kill(self.day).cloned();
+        let current = self.phase()?;
+        let next = self.next(current);
 
-        let next = match self.phase()? {
-            Night(night_activity) => match night_activity {
-                RoleAssignment => self.game.next_actor(&mut self.actor, |pos| {
+        let event = match current {
+            // -------- Night --------
+            Night(RoleAssignment) => {
+                self.game.next_actor(&mut self.actor, |pos| {
                     self.game
                         .player_by_position(pos)
                         .map(|p| p.role().is_none())
                         .unwrap_or(false)
-                }),
-                // SheriffReveal => self.game.sheriff().map(|p| p.position().unwrap()),
-                SheriffReveal => self.game.next_actor(&mut self.actor, |pos| {
-                    self.game
-                        .player_by_position(pos)
-                        .map(|p| p.is_sheriff())
-                        .unwrap_or(false)
-                }),
-                DonReveal => self.game.next_actor(&mut self.actor, |pos| {
-                    self.game
-                        .player_by_position(pos)
-                        .map(|p| p.is_don())
-                        .unwrap_or(false)
-                }),
-                MafiaBriefing => None,
-                MafiaShooting => self.game.next_actor(&mut self.actor, |pos| {
-                    self.game
-                        .player_by_position(pos)
-                        .map(|p| p.is_mafia())
-                        .unwrap_or(false)
-                }),
-                SheriffCheck => self.game.next_actor(&mut self.actor, |pos| {
-                    self.game
-                        .player_by_position(pos)
-                        .map(|p| p.is_sheriff())
-                        .unwrap_or(false)
-                }),
-                DonCheck => self.game.next_actor(&mut self.actor, |pos| {
-                    self.game
-                        .player_by_position(pos)
-                        .map(|p| p.is_don())
-                        .unwrap_or(false)
-                }),
-            },
+                });
 
-            Morning(morning_activity) => match morning_activity {
-                Guessing => self.single_actor(killed_player),
-                DeathSpeech => self.single_actor(killed_player),
-            },
+                if self.actor.is_completed() {
+                    self.actor.reset(
+                        self.game
+                            .sheriff()
+                            .expect("Sheriff should exist")
+                            .position()
+                            .expect("Sheriff must have assigned position"),
+                    );
 
-            Noon(Discussion) => self.game.next_actor(&mut self.actor, |pos| {
-                self.game
-                    .player_by_position(pos)
-                    .map(|p| p.is_alive())
-                    .unwrap_or(false)
-            }),
-
-            Evening(NominationAnnouncement) => None,
-            Evening(Voting) => self
-                .game
-                .voting_mut()
-                .entry(self.day)
-                .or_default()
-                .next_actor(&mut self.actor, |_| true),
-            Evening(TieDiscussion) | Evening(TieVoting) | Evening(FinalVoting) => {
-                let voting = self.game.voting().get(&self.day).unwrap();
-                let tied = voting.tie_nominees().to_vec();
-
-                self.game
-                    .voting_mut()
-                    .entry(self.day)
-                    .or_default()
-                    .next_actor(&mut self.actor, |pos| tied.contains(&pos))
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at role assignment"),
+                    }]
+                }
             }
-            Evening(FinalSpeech) => self
-                .game
-                .voting_mut()
-                .entry(self.day)
-                .or_default()
-                .next_actor(&mut self.actor, |_| true),
+            Night(SheriffReveal) => {
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_sheriff())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    self.actor.reset(
+                        self.game
+                            .don()
+                            .expect("Don should exist")
+                            .position()
+                            .expect("Don must have assigned position"),
+                    );
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at sheriff reveal"),
+                    }]
+                }
+            }
+            Night(DonReveal) => {
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_don())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    // Todo
+                    // First speaker just to pass correct datatype, does not matter value here.
+                    // will fix this to avoid missunderstanding
+                    self.actor.reset(self.first_speaker_of_day());
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at don reveal"),
+                    }]
+                }
+            }
+            Night(MafiaBriefing) => {
+                self.actor.reset(self.first_speaker_of_day());
+                self.set_phase(next)?;
+                vec![Event::PhaseAdvanced { phase: next }]
+            }
+
+            Night(MafiaShooting) => {
+                self.actor.reset(
+                    self.game
+                        .sheriff()
+                        .expect("Sheriff should exist")
+                        .position()
+                        .expect("Sheriff must have assigned position"),
+                );
+                self.set_phase(next)?;
+                vec![Event::PhaseAdvanced { phase: next }]
+            }
+            Night(SheriffCheck) => {
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_sheriff())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    self.actor.reset(
+                        self.game
+                            .don()
+                            .expect("Don should exist")
+                            .position()
+                            .expect("Don must have assigned position"),
+                    );
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at sheriff reveal"),
+                    }]
+                }
+            }
+            Night(DonCheck) => {
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_don())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    if next == Noon(Discussion) {
+                        self.actor.reset(self.first_speaker_of_day());
+                        self.set_phase(next)?;
+                        vec![Event::PhaseAdvanced { phase: next }]
+                    } else {
+                        self.actor.reset(
+                            *self
+                                .game
+                                .get_kill(self.day)
+                                .expect("Killed player must exist"),
+                        );
+                        self.set_phase(next)?;
+                        vec![Event::PhaseAdvanced { phase: next }]
+                    }
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at don reveal"),
+                    }]
+                }
+            }
+
+            // -------- Morning --------
+            Morning(Guessing) => {
+                let killed_p = self
+                    .game
+                    .get_kill(self.day)
+                    .expect("Killed player must exist");
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_dead() && *killed_p == p.position().unwrap())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    self.actor.reset(
+                        *self
+                            .game
+                            .get_kill(self.day)
+                            .expect("Killed player must exist"),
+                    );
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at don reveal"),
+                    }]
+                }
+            }
+            Morning(DeathSpeech) => {
+                let killed_p = self
+                    .game
+                    .get_kill(self.day)
+                    .expect("Killed player must exist");
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_dead() && *killed_p == p.position().unwrap())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    self.actor.reset(self.first_speaker_of_day());
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        chair: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at don reveal"),
+                    }]
+                }
+            }
+
+            // -------- Day --------
+            Noon(Discussion) => {
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_alive())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    if next == Night(MafiaShooting) {
+                        self.day.advance();
+                    }
+                    // Todo
+                    // First speaker just to pass correct datatype, does not matter value here.
+                    // will fix this to avoid missunderstanding
+
+                    self.actor.reset(self.first_speaker_of_day());
+                    self.set_phase(next)?;
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![]
+                }
+            }
+
+            // -------- Evening --------
+            Evening(NominationAnnouncement) => {
+                let nominees = self
+                    .game
+                    .voting()
+                    .get(&self.day)
+                    .expect("Voting must exist")
+                    .get_nominees();
+                self.actor.reset(nominees[0]);
+                self.set_phase(next)?;
+                vec![Event::PhaseAdvanced { phase: next }]
+            }
+            Evening(Voting) => {
+                let voting = self
+                    .game
+                    .voting()
+                    .get(&self.day)
+                    .expect("Voting must exist");
+
+                voting.next_actor(&mut self.actor, |_| true);
+
+                if self.actor.is_completed() {
+                    let winners = voting.winners();
+
+                    if winners.len() == 1 {
+                        self.game.record_eliminated(self.day, &winners)?;
+                        self.game
+                            .player_by_position_mut(winners[0])
+                            .unwrap()
+                            .mark_eliminated();
+                        self.actor.reset(winners[0]);
+                        self.set_phase(next)?;
+                    } else {
+                        self.game
+                            .tie_voting_mut()
+                            .insert(self.day, game::voting::Voting::from_nominees(&winners));
+                        let tie_nominees = self
+                            .game
+                            .tie_voting()
+                            .get(&self.day)
+                            .expect("Tie Voting must exist")
+                            .get_nominees();
+                        self.actor.reset(tie_nominees[0]);
+                        self.set_phase(next)?;
+                    }
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![]
+                }
+            }
+            Evening(TieDiscussion) => {
+                let voting = self
+                    .game
+                    .tie_voting()
+                    .get(&self.day)
+                    .expect("Voting must exist");
+
+                voting.next_actor(&mut self.actor, |_| true);
+
+                if self.actor.is_completed() {
+                    self.actor.reset(voting.get_nominees()[0]);
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![]
+                }
+            }
+            Evening(TieVoting) => {
+                let voting = self
+                    .game
+                    .tie_voting()
+                    .get(&self.day)
+                    .expect("Tie Voting must exist");
+
+                voting.next_actor(&mut self.actor, |_| true);
+
+                if self.actor.is_completed() {
+                    let winners = voting.winners();
+
+                    if winners.len() == 1 {
+                        self.game.record_eliminated(self.day, &winners)?;
+                        self.game
+                            .player_by_position_mut(winners[0])
+                            .unwrap()
+                            .mark_eliminated();
+                        self.actor.reset(winners[0]);
+                        self.set_phase(next)?;
+                    } else {
+                        self.set_phase(next)?;
+                    }
+
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![]
+                }
+            }
+            Evening(FinalVoting) => {
+                let yes_count = self
+                    .game
+                    .final_voting()
+                    .get(&self.day)
+                    .expect("Final voting results")
+                    .len();
+                let alive_count = self.game.alive_players().len();
+
+                let nominees = self
+                    .game
+                    .tie_voting()
+                    .get(&self.day)
+                    .map(|v| v.get_nominees().to_vec())
+                    .unwrap_or_default();
+
+                if yes_count > alive_count / 2 {
+                    self.game.record_eliminated(self.day, &nominees)?;
+                    for nominee in &nominees {
+                        self.game
+                            .player_by_position_mut(*nominee)
+                            .unwrap()
+                            .mark_eliminated();
+                    }
+                    self.actor.reset(nominees[0]);
+                } else {
+                    self.actor.reset(self.first_speaker_of_day());
+                    self.day.advance();
+                }
+
+                self.set_phase(next)?;
+                vec![Event::PhaseAdvanced { phase: next }]
+            }
+            Evening(FinalSpeech) => {
+                let eliminated = self
+                    .game
+                    .get_eliminated(self.day)
+                    .expect("there shoul be eliminted players, at least one");
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_eliminated() && eliminated.contains(&pos))
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    self.set_phase(next)?;
+                    self.day.advance();
+                    vec![Event::PhaseAdvanced { phase: next }]
+                } else {
+                    vec![]
+                }
+            }
         };
 
-        match next {
-            Some(chair) => Ok(vec![Event::ActorAdvanced { chair }]),
-            None => Ok(vec![Event::TurnCompleted]),
-        }
+        Ok(event)
     }
 
-    fn single_actor(&mut self, pos: Option<Position>) -> Option<Position> {
-        if self.actor.is_completed() {
-            return None;
-        }
-
-        if self.actor.current().is_none() {
-            self.actor.set_current(pos);
-            pos
-        } else {
-            self.actor.set_completed(true);
-            None
-        }
-    }
-
-    fn next_phase(&mut self, phase: Activity) -> Activity {
+    fn next(&self, phase: Activity) -> Activity {
         use Activity::*;
         use EveningActivity::*;
         use MorningActivity::*;
@@ -409,8 +722,7 @@ impl Engine {
         match phase {
             // -------- Night --------
             Night(RoleAssignment) => {
-                if self.actor.is_completed() {
-                    self.actor.reset(self.first_speaker_of_day());
+                if self.game.players().iter().all(|p| p.role().is_some()) {
                     Night(SheriffReveal)
                 } else {
                     Night(RoleAssignment)
@@ -418,80 +730,102 @@ impl Engine {
             }
             Night(SheriffReveal) => Night(DonReveal),
             Night(DonReveal) => Night(MafiaBriefing),
-            Night(MafiaBriefing) => {
-                if self.day.is_first() {
-                    Noon(Discussion)
-                } else {
-                    Night(SheriffCheck)
-                }
-            }
+            Night(MafiaBriefing) => Noon(Discussion),
             Night(MafiaShooting) => Night(SheriffCheck),
             Night(SheriffCheck) => Night(DonCheck),
-            Night(DonCheck) => Morning(Guessing),
+            Night(DonCheck) => {
+                if self.day.is_second() && self.game.get_kill(self.day).is_some() {
+                    Morning(Guessing)
+                } else if self.game.get_kill(self.day).is_some() {
+                    Morning(DeathSpeech)
+                } else {
+                    Noon(Discussion)
+                }
+            }
 
             // -------- Morning --------
             Morning(Guessing) => Morning(DeathSpeech),
             Morning(DeathSpeech) => Noon(Discussion),
 
             // -------- Day --------
-            Noon(Discussion) => Evening(NominationAnnouncement),
+            Noon(Discussion) => {
+                let voting = game::voting::Voting::new();
+                let voting = self.game.voting().get(&self.day).unwrap_or(&voting);
+
+                if voting.has_nominees() {
+                    if self.day.is_first() && voting.nominee_count() == 1 {
+                        Night(MafiaShooting)
+                    } else {
+                        Evening(NominationAnnouncement)
+                    }
+                } else {
+                    Night(MafiaShooting)
+                }
+            }
 
             // -------- Evening --------
             Evening(NominationAnnouncement) => Evening(Voting),
             Evening(Voting) => {
-                let voting = self.game.voting().get(&self.day).unwrap();
-                let winners = voting.winners();
-
-                if winners.len() > 1 {
-                    Evening(TieDiscussion)
-                } else {
+                let voting = self
+                    .game
+                    .voting()
+                    .get(&self.day)
+                    .expect("Voting must exist at Voting");
+                if voting.winners().len() == 1 {
                     Evening(FinalSpeech)
+                } else {
+                    Evening(TieDiscussion)
                 }
             }
             Evening(TieDiscussion) => Evening(TieVoting),
             Evening(TieVoting) => {
-                let voting = self.game.voting().get(&self.day).unwrap();
-                let winners = voting.resolve_tie_vote();
-
-                if winners.len() > 1 {
-                    Evening(FinalVoting)
-                } else {
+                let voting = self
+                    .game
+                    .tie_voting()
+                    .get(&self.day)
+                    .expect("Voting must exist at Voting");
+                if voting.winners().len() == 1 {
                     Evening(FinalSpeech)
+                } else {
+                    Evening(FinalVoting)
                 }
             }
-            Evening(FinalVoting) => Evening(FinalSpeech),
+            Evening(FinalVoting) => {
+                let yes_count = self
+                    .game
+                    .final_voting()
+                    .get(&self.day)
+                    .expect("Final voting results")
+                    .len();
+                let alive_count = self.game.alive_players().len();
+                if yes_count > alive_count / 2 {
+                    Evening(FinalSpeech)
+                } else {
+                    Night(MafiaShooting)
+                }
+            }
             Evening(FinalSpeech) => Night(MafiaShooting),
         }
     }
 
-    fn advance_phase(&mut self) -> Result<Vec<Event>> {
-        let current = self.phase()?;
-        let next = self.next_phase(current);
+    fn first_speaker_of_day(&self) -> Position {
+        let start: Position = ((self.day.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into();
 
-        if current == Activity::Evening(EveningActivity::FinalSpeech) {
-            let voting = self.game.voting().get(&self.day).unwrap();
-            let eliminated = voting.winners(); // one or many
+        // walk table circularly, starting from anchor
+        for offset in 0..Game::PLAYER_COUNT {
+            let pos: Position = (((start.value() - 1 + offset) % Game::PLAYER_COUNT) + 1).into();
 
-            for pos in eliminated {
-                if let Some(player) = self.game.player_by_position_mut(pos) {
-                    player.mark_eliminated();
-                }
+            if self
+                .game
+                .player_by_position(pos)
+                .map(|p| p.is_alive())
+                .unwrap_or(false)
+            {
+                return pos;
             }
         }
 
-        if next == Activity::Night(NightActivity::MafiaShooting) {
-            // new round
-            self.day.advance();
-        };
-
-        self.set_phase(next)?;
-        self.actor.reset(self.first_speaker_of_day());
-
-        Ok(vec![Event::PhaseAdvanced { phase: next }])
-    }
-
-    fn first_speaker_of_day(&self) -> Position {
-        ((self.day.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into()
+        panic!("At least one alive player must exist");
     }
 
     fn phase(&self) -> Result<Activity> {
@@ -575,8 +909,29 @@ impl Engine {
         }
     }
 
+    pub fn ensure_night(&self) -> Result<()> {
+        match &self.phase()? {
+            Activity::Night(_) => Ok(()),
+            other => bail!("Engine is not in Night phase, got {other:?}"),
+        }
+    }
+
+    pub fn ensure_morning(&self) -> Result<()> {
+        match &self.phase()? {
+            Activity::Morning(_) => Ok(()),
+            other => bail!("Engine is not in Morning phase, got {other:?}"),
+        }
+    }
+
+    pub fn ensure_noon(&self) -> Result<()> {
+        match &self.phase()? {
+            Activity::Noon(_) => Ok(()),
+            other => bail!("Engine is not in Noon phase, got {other:?}"),
+        }
+    }
+
     pub fn ensure_evening(&self) -> Result<()> {
-        match &self.phase()?.time() {
+        match &self.phase()?.daytime() {
             Day::Evening => Ok(()),
             other => bail!("Engine is not in Voting phase, got {other:?}"),
         }
@@ -584,7 +939,7 @@ impl Engine {
 
     fn ensure_phase(&self, expected: Day) -> Result<()> {
         let phase = self.phase()?;
-        if phase.time() != expected {
+        if phase.daytime() != expected {
             bail!("Wrong phase. Expected {expected:?}, got {phase:?}");
         }
         Ok(())

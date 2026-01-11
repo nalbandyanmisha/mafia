@@ -5,7 +5,7 @@ pub enum Command {
     Join { name: String },
     Leave { name: String },
     Start,
-    AdvanceActor,
+    Advance,
     AssignRole,
     RevokeRole,
     Warn { target: Position },
@@ -14,5 +14,4 @@ pub enum Command {
     Vote { targets: Vec<Position> },
     Shoot { target: Position },
     Check { target: Position },
-    NextPhase,
 }

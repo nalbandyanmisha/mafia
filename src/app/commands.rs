@@ -13,7 +13,7 @@ pub enum Command {
         name: String,
     },
     Start,
-    AdvanceActor,
+    Advance,
     AssignRole,
     RevokeRole,
     Warn {
@@ -36,8 +36,6 @@ pub enum Command {
     Check {
         position: u8,
     },
-    #[command(subcommand)]
-    Next(NextCommand),
     #[command(subcommand)]
     Assign(AssignCommand),
 

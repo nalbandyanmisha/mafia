@@ -34,7 +34,10 @@ pub struct Game {
     pub players: Vec<Player>,
     pub kill: HashMap<usize, Position>,
     pub voting: HashMap<usize, Voting>,
+    pub tie_voting: HashMap<usize, Voting>,
+    pub final_voting: HashMap<usize, Vec<Position>>,
     pub check: HashMap<usize, Check>,
+    pub eliminated: HashMap<usize, Vec<Position>>,
 }
 
 #[derive(Clone, Debug)]

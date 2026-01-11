@@ -47,8 +47,9 @@ impl Actor {
         self.current = position;
     }
 
-    pub fn set_completed(&mut self, completed: bool) {
-        self.completed = completed;
+    pub fn mark_completed(&mut self) {
+        self.current = None;
+        self.completed = true;
     }
 
     pub fn set_start(&mut self, position: Position) {

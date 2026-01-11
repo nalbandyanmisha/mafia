@@ -27,8 +27,11 @@ pub enum Error {
 pub struct Game {
     players: Vec<Player>,
     voting: HashMap<DayIndex, voting::Voting>,
+    tie_voting: HashMap<DayIndex, voting::Voting>,
+    final_voting: HashMap<DayIndex, Vec<Position>>,
     check: HashMap<DayIndex, check::Check>,
     kill: HashMap<DayIndex, Position>,
+    eliminated: HashMap<DayIndex, Vec<Position>>,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
 }
@@ -44,6 +47,16 @@ impl Snapshot for Game {
                 .iter()
                 .map(|(k, v)| (k.current(), v.snapshot()))
                 .collect(),
+            tie_voting: self
+                .tie_voting
+                .iter()
+                .map(|(k, v)| (k.current(), v.snapshot()))
+                .collect(),
+            final_voting: self
+                .final_voting
+                .iter()
+                .map(|(k, v)| (k.current(), v.iter().map(|p| p.snapshot()).collect()))
+                .collect(),
             check: self
                 .check
                 .iter()
@@ -53,6 +66,11 @@ impl Snapshot for Game {
                 .kill
                 .iter()
                 .map(|(k, v)| (k.current(), v.snapshot()))
+                .collect(),
+            eliminated: self
+                .eliminated
+                .iter()
+                .map(|(k, v)| (k.current(), v.iter().map(|p| p.snapshot()).collect()))
                 .collect(),
         }
     }
@@ -92,7 +110,7 @@ impl Turn for Game {
 
             // 🔒 If we are about to loop back to start → STOP
             if pos == start && actor.current().is_some() {
-                actor.set_completed(true);
+                actor.mark_completed();
                 return None;
             }
 
@@ -100,7 +118,7 @@ impl Turn for Game {
             return Some(pos);
         }
 
-        actor.set_completed(true);
+        actor.mark_completed();
         None
     }
 }
@@ -112,8 +130,11 @@ impl Game {
         let mut positions_pool = Vec::new();
         let players = Vec::with_capacity(Self::PLAYER_COUNT as usize);
         let voting = HashMap::new();
+        let tie_voting = HashMap::new();
+        let final_voting = HashMap::new();
         let check = HashMap::new();
         let kill = HashMap::new();
+        let eliminated = HashMap::new();
 
         for pos in 1..=Self::PLAYER_COUNT {
             positions_pool.push(Position::new(pos));
@@ -135,8 +156,11 @@ impl Game {
         Self {
             players,
             voting,
+            tie_voting,
+            final_voting,
             check,
             kill,
+            eliminated,
             roles_pool,
             positions_pool,
         }
@@ -170,8 +194,24 @@ impl Game {
         &self.voting
     }
 
+    pub fn tie_voting(&self) -> &HashMap<DayIndex, Voting> {
+        &self.tie_voting
+    }
+
     pub fn voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
         &mut self.voting
+    }
+
+    pub fn tie_voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
+        &mut self.tie_voting
+    }
+
+    pub fn final_voting(&self) -> &HashMap<DayIndex, Vec<Position>> {
+        &self.final_voting
+    }
+
+    pub fn final_voting_mut(&mut self) -> &mut HashMap<DayIndex, Vec<Position>> {
+        &mut self.final_voting
     }
 
     /*---------------- Checks ---------------- */
@@ -188,7 +228,16 @@ impl Game {
     }
 
     pub fn record_mafia_kill(&mut self, day: DayIndex, killed: Position) -> Result<(), Error> {
-        self.kill.insert(day, killed);
+        self.kill.entry(day).or_insert(killed);
+        Ok(())
+    }
+
+    pub fn record_eliminated(
+        &mut self,
+        day: DayIndex,
+        eliminated: &[Position],
+    ) -> Result<(), Error> {
+        self.eliminated.entry(day).or_default().extend(eliminated);
         Ok(())
     }
 
@@ -196,6 +245,9 @@ impl Game {
         self.kill.get(&day)
     }
 
+    pub fn get_eliminated(&self, day: DayIndex) -> Option<&Vec<Position>> {
+        self.eliminated.get(&day)
+    }
     // ---------------- Players ----------------
     pub fn add_player(&mut self, name: &str) -> Result<(), String> {
         if self.players.len() >= Self::PLAYER_COUNT as usize {
@@ -221,6 +273,10 @@ impl Game {
 
     pub fn players_mut(&mut self) -> &mut [Player] {
         &mut self.players
+    }
+
+    pub fn alive_players(&self) -> Vec<&Player> {
+        self.players.iter().filter(|p| p.is_alive()).collect()
     }
 
     pub fn player_by_position(&self, position: Position) -> Option<&Player> {
