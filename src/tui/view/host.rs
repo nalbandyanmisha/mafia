@@ -1,9 +1,13 @@
 use crate::domain::{Activity, Day, EveningActivity, MorningActivity, NightActivity, NoonActivity};
 use crate::snapshot;
+use crate::tui::view::host_narration::build_host_narration;
 use ratatui::style::{Color, Modifier, Style};
+
+use super::HostNarration;
 
 #[derive(Debug, Clone)]
 pub struct HostView {
+    pub narration: HostNarration,
     pub title: String,
     pub title_style: Style,
     pub header: HostHeader,
@@ -64,6 +68,7 @@ fn format_votes_verbose(voting: &snapshot::Voting) -> String {
 impl HostView {
     pub fn from_snapshot(app: &snapshot::App) -> Self {
         use Day::*;
+        let narration = build_host_narration(app);
         let engine = &app.engine;
         let phase = engine.phase.expect("phase must exist");
 
@@ -75,6 +80,7 @@ impl HostView {
         };
 
         Self {
+            narration,
             title,
             title_style: Style::default().fg(title_style),
             header: build_header(phase),

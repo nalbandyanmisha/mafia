@@ -38,6 +38,12 @@ fn draw_main(frame: &mut Frame, area: Rect, view: &HostView) -> Result<(), anyho
         lines.push(Line::from(sub.clone()));
     }
 
+    // --- Render HostNarration ---
+    lines.push(Line::from(view.narration.title.clone()));
+    for line in view.narration.body.iter() {
+        lines.push(Line::from(line.clone()));
+    }
+
     let text = Text::from(lines);
     let centered = centered_area(area, text.height() as u16);
 
