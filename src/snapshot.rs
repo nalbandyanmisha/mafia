@@ -37,6 +37,7 @@ pub struct Game {
     pub tie_voting: HashMap<usize, Voting>,
     pub final_voting: HashMap<usize, Vec<Position>>,
     pub check: HashMap<usize, Check>,
+    pub guess: Vec<Position>,
     pub eliminated: HashMap<usize, Vec<Position>>,
 }
 

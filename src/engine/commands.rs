@@ -14,4 +14,5 @@ pub enum Command {
     Vote { targets: Vec<Position> },
     Shoot { target: Position },
     Check { target: Position },
+    Guess { targets: Vec<Position> },
 }

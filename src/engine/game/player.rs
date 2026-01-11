@@ -161,6 +161,9 @@ impl Player {
     }
 
     // ----------- Queries ----------
+    pub fn has_role(&self) -> bool {
+        self.role.is_some()
+    }
     pub fn is_alive(&self) -> bool {
         self.status == Status::Alive
     }

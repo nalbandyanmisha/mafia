@@ -31,6 +31,7 @@ pub struct Game {
     final_voting: HashMap<DayIndex, Vec<Position>>,
     check: HashMap<DayIndex, check::Check>,
     kill: HashMap<DayIndex, Position>,
+    guess: Vec<Position>,
     eliminated: HashMap<DayIndex, Vec<Position>>,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
@@ -67,6 +68,7 @@ impl Snapshot for Game {
                 .iter()
                 .map(|(k, v)| (k.current(), v.snapshot()))
                 .collect(),
+            guess: self.guess.clone(),
             eliminated: self
                 .eliminated
                 .iter()
@@ -134,6 +136,7 @@ impl Game {
         let final_voting = HashMap::new();
         let check = HashMap::new();
         let kill = HashMap::new();
+        let guess = Vec::new();
         let eliminated = HashMap::new();
 
         for pos in 1..=Self::PLAYER_COUNT {
@@ -160,6 +163,7 @@ impl Game {
             final_voting,
             check,
             kill,
+            guess,
             eliminated,
             roles_pool,
             positions_pool,
@@ -238,6 +242,11 @@ impl Game {
         eliminated: &[Position],
     ) -> Result<(), Error> {
         self.eliminated.entry(day).or_default().extend(eliminated);
+        Ok(())
+    }
+
+    pub fn record_guess(&mut self, guess: Position) -> Result<(), Error> {
+        self.guess.push(guess);
         Ok(())
     }
 

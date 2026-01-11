@@ -79,7 +79,7 @@ impl App {
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
 
-            Advance => {
+            Next => {
                 let _ = self.engine.apply(EngineCommand::Advance);
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
@@ -130,16 +130,30 @@ impl App {
                 });
                 let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
             }
-            Assign(subcommand) => match subcommand {
-                commands::AssignCommand::Player { name } => {
-                    let _ = self.engine.apply(EngineCommand::Join { name });
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            Guess { targets } => {
+                let mut positions = Vec::new();
+                for target in targets {
+                    positions.push(target.into());
                 }
-                commands::AssignCommand::Role { role } => {
-                    let _ = self.engine.apply(EngineCommand::AssignRole);
-                    let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                let _ = self
+                    .engine
+                    .apply(EngineCommand::Vote { targets: positions });
+                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+            }
+            Assign { command } => {
+                let command = command.unwrap_or(commands::AssignCommand::Role { role: None });
+
+                match command {
+                    commands::AssignCommand::Player { name } => {
+                        let _ = self.engine.apply(EngineCommand::Join { name });
+                        let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                    }
+                    commands::AssignCommand::Role { role } => {
+                        let _ = self.engine.apply(EngineCommand::AssignRole);
+                        let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                    }
                 }
-            },
+            }
         }
     }
 

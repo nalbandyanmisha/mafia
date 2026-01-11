@@ -13,7 +13,7 @@ pub enum Command {
         name: String,
     },
     Start,
-    Advance,
+    Next,
     AssignRole,
     RevokeRole,
     Warn {
@@ -36,8 +36,14 @@ pub enum Command {
     Check {
         position: u8,
     },
-    #[command(subcommand)]
-    Assign(AssignCommand),
+    Guess {
+        targets: Vec<u8>,
+    },
+
+    Assign {
+        #[command(subcommand)]
+        command: Option<AssignCommand>,
+    },
 
     // app lelvel commands
     Timer {

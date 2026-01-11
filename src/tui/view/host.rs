@@ -105,7 +105,7 @@ fn build_header(activity: Activity) -> HostHeader {
         },
 
         Morning(a) => match a {
-            DeathSpeech => ("Final speech", Color::Cyan),
+            DeathSpeech => ("Death speech", Color::Cyan),
             Guessing => ("Guessing", Color::Cyan),
         },
 
@@ -137,7 +137,7 @@ fn build_main(app: &snapshot::App) -> HostMain {
     use NoonActivity::*;
 
     let engine = &app.engine;
-    let phase = engine.phase.unwrap();
+    let phase = engine.phase.expect("phase must exist");
 
     match phase {
         Night(a) => match a {
@@ -147,7 +147,7 @@ fn build_main(app: &snapshot::App) -> HostMain {
                     .game
                     .kill
                     .get(&engine.day)
-                    .map(|c| format!("🎯 Chair {}", c.value())),
+                    .map(|c| format!("🎯 Chair {} was killed", c.value())),
                 highlight_actor: true,
             },
 
@@ -158,7 +158,12 @@ fn build_main(app: &snapshot::App) -> HostMain {
                     .check
                     .get(&engine.day)
                     .and_then(|c| c.sheriff)
-                    .map(|p| format!("🔍 Checking Chair {}", p.value())),
+                    .map(|p| {
+                        format!(
+                            "🔍 Sheriff checked player at position {} and found",
+                            p.value(),
+                        )
+                    }),
                 highlight_actor: true,
             },
 

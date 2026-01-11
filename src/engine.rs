@@ -67,6 +67,7 @@ impl Engine {
             Command::Vote { targets } => self.vote(targets),
             Command::Shoot { target } => self.shoot(target),
             Command::Check { target } => self.check(target),
+            Command::Guess { targets } => self.guess(targets.as_slice()),
         }
     }
 
@@ -249,6 +250,13 @@ impl Engine {
         Ok(vec![])
     }
 
+    fn guess(&mut self, geusses: &[Position]) -> Result<Vec<Event>> {
+        for guess in geusses {
+            self.game.record_guess(*guess);
+        }
+        Ok(vec![])
+    }
+
     fn nominate(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_discussion()?;
         let by = self
@@ -320,6 +328,15 @@ impl Engine {
         let event = match current {
             // -------- Night --------
             Night(RoleAssignment) => {
+                if self.actor.current().is_some_and(|position| {
+                    !self
+                        .game
+                        .player_by_position(position)
+                        .expect("Player at {position} must exist")
+                        .has_role()
+                }) {
+                    return Ok(vec![]);
+                }
                 self.game.next_actor(&mut self.actor, |pos| {
                     self.game
                         .player_by_position(pos)
