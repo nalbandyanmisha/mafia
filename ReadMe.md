@@ -41,6 +41,7 @@ not the source of truth.
 
 ## High-level game flow
 
+Lobby → Night → Day → Vote → Resolution → Night → ...
 Each phase:
 
 - Allows a specific set of commands
@@ -66,12 +67,23 @@ next
 assign
 next
 assign
-next````
+next
+
+---
+
+## Interaction model
+
+- Single command input line
+
+- Explicit typed commands (no modal keybindings)
+
+- Event log and engine state rendered in the TUI
+
+--- 
 
 ## Project structure
 ├── engine/     # Core game logic, state, commands, phases
 ├── tui/        # Terminal UI (layout, widgets, input)
 ├── app/        # Application glue code
 └── docs/       # Documentation (work in progress)
-
 
