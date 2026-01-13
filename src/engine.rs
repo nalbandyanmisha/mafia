@@ -11,7 +11,7 @@ use turn::Turn;
 use self::{commands::Command, game::Game};
 use crate::{
     domain::{
-        Activity, Day, DayIndex, EngineState, EveningActivity, LobbyStatus, MorningActivity,
+        Activity, DayIndex, EngineState, EveningActivity, LobbyStatus, MorningActivity,
         NightActivity, NoonActivity, Position,
     },
     snapshot::{self, Snapshot},
@@ -29,19 +29,6 @@ pub struct Engine {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    // lifecycle
-    #[error("Engine is not in lobby")]
-    NotInLobby,
-    #[error("Engine is not in game")]
-    NotInGame,
-
-    // phase
-    #[error("Wrong phase: expected {expected:?}, got {current:?}")]
-    WrongPhase {
-        expected: Activity,
-        current: Activity,
-    },
-
     // delegation
     #[error(transparent)]
     Game(#[from] game::Error),
@@ -54,10 +41,6 @@ pub enum Error {
 
     #[error(transparent)]
     Check(#[from] game::check::Error),
-
-    // actor
-    #[error("No active actor")]
-    NoActiveActor,
 }
 
 #[derive(Debug, Clone)]
@@ -65,11 +48,9 @@ pub enum Event {
     // lifecycle
     GameStarted,
     PhaseAdvanced { from: Activity, to: Activity },
-    DayAdvanced { from: DayIndex, to: DayIndex },
 
     // actor
     ActorAdvanced { to: Position },
-    ActorCompleted,
 
     // domain passthrough
     Game(game::Event),
@@ -84,14 +65,8 @@ impl fmt::Display for Event {
             Event::PhaseAdvanced { from, to } => {
                 write!(f, "Game phase advanced from  {from} to {to}")
             }
-            Event::DayAdvanced { from, to } => {
-                write!(f, "Game day advanced from  {from} to {to}")
-            }
             Event::ActorAdvanced { to } => {
                 write!(f, "Actor advanced to {to}")
-            }
-            Event::ActorCompleted => {
-                write!(f, "Actor ")
             }
             Event::Game(event) => write!(f, "{event}"),
         }
@@ -280,14 +255,7 @@ impl Engine {
     // ------------------------------
     // Player actions
     // ------------------------------
-    // fn warn(&mut self, target: Position) -> Result<Vec<Event>> {
-    //     self.ensure_alive(target)?;
-    //     let player = self.game.player_by_position_mut(target).unwrap();
-    //     player.add_warning()?;
-    //     let warnings = player.warnings();
-    //
-    //     Ok(vec![Event::PlayerWarned { target, warnings }])
-    // }
+
     fn warn(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_alive(target)?;
 
@@ -1050,31 +1018,31 @@ impl Engine {
         }
     }
 
-    pub fn ensure_don_check(&self, position: Position) -> Result<()> {
-        match self.phase()? {
-            Activity::Night(NightActivity::DonCheck) => {
-                let by = self.game.don();
-                if by.unwrap().position().unwrap() != position {
-                    bail!("Player {position:?} is not Don");
-                }
-                Ok(())
-            }
-            other => bail!("Engine is not in Don Check phase, got {other:?}"),
-        }
-    }
-
-    pub fn ensure_sheriff_check(&self, position: Position) -> Result<()> {
-        match self.phase()? {
-            Activity::Night(NightActivity::SheriffCheck) => {
-                let by = self.game.sheriff();
-                if by.unwrap().position().unwrap() != position {
-                    bail!("Player {position:?} is not Sheriff");
-                }
-                Ok(())
-            }
-            other => bail!("Engine is not in Sheriff Check phase, got {other:?}"),
-        }
-    }
+    // pub fn ensure_don_check(&self, position: Position) -> Result<()> {
+    //     match self.phase()? {
+    //         Activity::Night(NightActivity::DonCheck) => {
+    //             let by = self.game.don();
+    //             if by.unwrap().position().unwrap() != position {
+    //                 bail!("Player {position:?} is not Don");
+    //             }
+    //             Ok(())
+    //         }
+    //         other => bail!("Engine is not in Don Check phase, got {other:?}"),
+    //     }
+    // }
+    //
+    // pub fn ensure_sheriff_check(&self, position: Position) -> Result<()> {
+    //     match self.phase()? {
+    //         Activity::Night(NightActivity::SheriffCheck) => {
+    //             let by = self.game.sheriff();
+    //             if by.unwrap().position().unwrap() != position {
+    //                 bail!("Player {position:?} is not Sheriff");
+    //             }
+    //             Ok(())
+    //         }
+    //         other => bail!("Engine is not in Sheriff Check phase, got {other:?}"),
+    //     }
+    // }
 
     pub fn ensure_discussion(&self) -> Result<()> {
         match &self.phase()? {
@@ -1083,41 +1051,41 @@ impl Engine {
         }
     }
 
-    pub fn ensure_night(&self) -> Result<()> {
-        match &self.phase()? {
-            Activity::Night(_) => Ok(()),
-            other => bail!("Engine is not in Night phase, got {other:?}"),
-        }
-    }
-
-    pub fn ensure_morning(&self) -> Result<()> {
-        match &self.phase()? {
-            Activity::Morning(_) => Ok(()),
-            other => bail!("Engine is not in Morning phase, got {other:?}"),
-        }
-    }
-
-    pub fn ensure_noon(&self) -> Result<()> {
-        match &self.phase()? {
-            Activity::Noon(_) => Ok(()),
-            other => bail!("Engine is not in Noon phase, got {other:?}"),
-        }
-    }
-
-    pub fn ensure_evening(&self) -> Result<()> {
-        match &self.phase()?.daytime() {
-            Day::Evening => Ok(()),
-            other => bail!("Engine is not in Voting phase, got {other:?}"),
-        }
-    }
-
-    fn ensure_phase(&self, expected: Day) -> Result<()> {
-        let phase = self.phase()?;
-        if phase.daytime() != expected {
-            bail!("Wrong phase. Expected {expected:?}, got {phase:?}");
-        }
-        Ok(())
-    }
+    // pub fn ensure_night(&self) -> Result<()> {
+    //     match &self.phase()? {
+    //         Activity::Night(_) => Ok(()),
+    //         other => bail!("Engine is not in Night phase, got {other:?}"),
+    //     }
+    // }
+    //
+    // pub fn ensure_morning(&self) -> Result<()> {
+    //     match &self.phase()? {
+    //         Activity::Morning(_) => Ok(()),
+    //         other => bail!("Engine is not in Morning phase, got {other:?}"),
+    //     }
+    // }
+    //
+    // pub fn ensure_noon(&self) -> Result<()> {
+    //     match &self.phase()? {
+    //         Activity::Noon(_) => Ok(()),
+    //         other => bail!("Engine is not in Noon phase, got {other:?}"),
+    //     }
+    // }
+    //
+    // pub fn ensure_evening(&self) -> Result<()> {
+    //     match &self.phase()?.daytime() {
+    //         Day::Evening => Ok(()),
+    //         other => bail!("Engine is not in Voting phase, got {other:?}"),
+    //     }
+    // }
+    //
+    // fn ensure_phase(&self, expected: Day) -> Result<()> {
+    //     let phase = self.phase()?;
+    //     if phase.daytime() != expected {
+    //         bail!("Wrong phase. Expected {expected:?}, got {phase:?}");
+    //     }
+    //     Ok(())
+    // }
 
     fn ensure_alive(&self, position: Position) -> Result<()> {
         let player = self

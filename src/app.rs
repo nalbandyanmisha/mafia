@@ -7,6 +7,7 @@ use crate::engine::{Engine, commands::Command as EngineCommand};
 use crate::snapshot::{self, Snapshot};
 use clap::Parser;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 #[derive(PartialEq, Clone)]
 pub enum AppStatus {
@@ -22,6 +23,7 @@ pub struct App {
     pub events: Vec<AppEvent>,
     pub current_timer: Option<u64>, // <- NEW: store timer
     pub event_tx: mpsc::Sender<AppEvent>,
+    pub timer_task: Option<JoinHandle<()>>,
 }
 
 impl Snapshot for App {
@@ -46,6 +48,7 @@ impl App {
             events: Vec::new(),
             current_timer: None,
             event_tx,
+            timer_task: None,
         }
     }
 
@@ -58,8 +61,11 @@ impl App {
                 self.status = AppStatus::Quit;
             }
             Timer { seconds } => {
+                if let Some(task) = self.timer_task.take() {
+                    task.abort();
+                }
                 let tx = self.event_tx.clone();
-                tokio::spawn(async move {
+                let handle = tokio::spawn(async move {
                     let _ = tx.send(AppEvent::TimerStarted(seconds)).await;
                     for remaining in (0..seconds).rev() {
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -67,6 +73,8 @@ impl App {
                     }
                     let _ = tx.send(AppEvent::TimerEnded).await;
                 });
+
+                self.timer_task = Some(handle);
             }
             Join { name } => match self.engine.apply(EngineCommand::Join { name }) {
                 Ok(events) => {
