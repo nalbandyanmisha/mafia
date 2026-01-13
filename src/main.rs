@@ -58,7 +58,12 @@ async fn main() -> anyhow::Result<()> {
                     AppEvent::InputEnter => app.parse_input().await,
                     AppEvent::InputChar(c) => app.input.push(c),
                     AppEvent::InputBackspace => { app.input.pop(); },
-                    AppEvent::EngineUpdated => {},
+                    AppEvent::Engine(event) => {
+                        app.events.push(AppEvent::Engine(event));
+                        if app.events.len() > 100 {
+                            app.events.remove(0);
+                        }
+                    }
                     AppEvent::TimerStarted(s) => app.current_timer = Some(s),
                     AppEvent::TimerTick(s) => app.current_timer = Some(s),
                     AppEvent::TimerEnded => app.current_timer = None,

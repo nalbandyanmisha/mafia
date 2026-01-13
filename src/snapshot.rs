@@ -54,5 +54,6 @@ pub struct Engine {
 pub struct App {
     pub engine: Engine,
     pub input: String,
+    pub events: Vec<crate::app::events::Event>,
     pub current_timer: Option<u64>,
 }

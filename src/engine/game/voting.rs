@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use crate::{
     domain::position::Position,
@@ -11,6 +11,43 @@ pub struct Voting {
     nominations: HashMap<Position, Position>, // nominator -> nominee
     nominees: Vec<Position>,                  // ordered
     votes: HashMap<Position, Vec<Position>>,  // nominee -> voters
+}
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    Nominated {
+        nominator: Position,
+        nominee: Position,
+    },
+    Voted {
+        voter: Position,
+        nominee: Position,
+    },
+}
+
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::Nominated { nominator, nominee } => {
+                write!(f, "Player at position {nominator} has nominated {nominee}")
+            }
+            Event::Voted { voter, nominee } => {
+                write!(f, "Player at position {voter} has voted for {nominee}")
+            }
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Nominator {0:?} has already made a nomination")]
+    NominationAlreadyExists(Position),
+
+    #[error("Voter {0:?} has already voted for {1:?}")]
+    AlreadyVoted(Position, Position),
+
+    #[error("Nominee {0:?} is not in the nominee list")]
+    InvalidNominee(Position),
 }
 
 impl Snapshot for Voting {
@@ -103,33 +140,58 @@ impl Voting {
         }
     }
 
-    pub fn record_nomination(&mut self, nominator: Position, nominee: Position) {
+    pub fn has_nominees(&self) -> bool {
+        !self.nominees.is_empty()
+    }
+
+    pub fn nominee_count(&self) -> usize {
+        self.nominees.len()
+    }
+
+    pub fn get_nominees(&self) -> &[Position] {
+        &self.nominees
+    }
+
+    pub fn nominate(
+        &mut self,
+        nominator: Position,
+        nominee: Position,
+    ) -> Result<Vec<Event>, Error> {
         if self.nominations.contains_key(&nominator) {
-            return;
+            return Err(Error::NominationAlreadyExists(nominator));
         }
-        self.nominations.entry(nominator).or_insert(nominee);
+
+        self.nominations.insert(nominator, nominee);
         if !self.nominees.contains(&nominee) {
             self.nominees.push(nominee);
         }
+
+        Ok(vec![Event::Nominated { nominator, nominee }])
     }
 
-    pub fn record_vote(&mut self, voter: Position, nominee: Position) {
+    pub fn vote(&mut self, voter: Position, nominee: Position) -> Result<Vec<Event>, Error> {
+        if !self.nominees.contains(&nominee) {
+            return Err(Error::InvalidNominee(nominee));
+        }
+
         let voters = self.votes.entry(nominee).or_default();
-        if !voters.contains(&voter) {
-            voters.push(voter);
-        }
-    }
 
-    pub fn compute_vote_results(&self) -> HashMap<Position, usize> {
-        let mut results: HashMap<Position, usize> = HashMap::new();
-        for (nominee, voters) in self.votes.iter() {
-            results.insert(*nominee, voters.len());
+        if voters.contains(&voter) {
+            return Err(Error::AlreadyVoted(voter, nominee));
         }
-        results
+
+        voters.push(voter);
+
+        Ok(vec![Event::Voted { voter, nominee }])
     }
 
     pub fn winners(&self) -> Vec<Position> {
-        let results = self.compute_vote_results();
+        let results: HashMap<Position, usize> = self
+            .votes
+            .iter()
+            .map(|(nominee, voters)| (*nominee, voters.len()))
+            .collect();
+
         if results.is_empty() {
             return vec![];
         }
@@ -138,28 +200,8 @@ impl Voting {
 
         results
             .into_iter()
-            .filter(|(_, c)| *c == max)
+            .filter(|(_, count)| *count == max)
             .map(|(p, _)| p)
             .collect()
-    }
-
-    pub fn has_nominees(&self) -> bool {
-        self.nominees.len() > 0
-    }
-
-    pub fn nominee_count(&self) -> usize {
-        self.nominees.len()
-    }
-
-    pub fn get_nominations(&self) -> &HashMap<Position, Position> {
-        &self.nominations
-    }
-
-    pub fn get_nominees(&self) -> &[Position] {
-        &self.nominees
-    }
-
-    pub fn get_votes(&self) -> &HashMap<Position, Vec<Position>> {
-        &self.votes
     }
 }

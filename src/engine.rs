@@ -1,13 +1,14 @@
 pub mod actor;
 pub mod commands;
-pub mod events;
 pub mod game;
 pub mod turn;
+
+use std::fmt;
 
 use actor::Actor;
 use turn::Turn;
 
-use self::{commands::Command, events::Event, game::Game};
+use self::{commands::Command, game::Game};
 use crate::{
     domain::{
         Activity, Day, DayIndex, EngineState, EveningActivity, LobbyStatus, MorningActivity,
@@ -15,7 +16,7 @@ use crate::{
     },
     snapshot::{self, Snapshot},
 };
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Ok, Result, anyhow, bail};
 use rand::prelude::*;
 
 #[derive(Debug)]
@@ -24,6 +25,77 @@ pub struct Engine {
     pub actor: Actor,
     pub day: DayIndex,
     pub state: EngineState,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // lifecycle
+    #[error("Engine is not in lobby")]
+    NotInLobby,
+    #[error("Engine is not in game")]
+    NotInGame,
+
+    // phase
+    #[error("Wrong phase: expected {expected:?}, got {current:?}")]
+    WrongPhase {
+        expected: Activity,
+        current: Activity,
+    },
+
+    // delegation
+    #[error(transparent)]
+    Game(#[from] game::Error),
+
+    #[error(transparent)]
+    Player(#[from] game::player::Error),
+
+    #[error(transparent)]
+    Voting(#[from] game::voting::Error),
+
+    #[error(transparent)]
+    Check(#[from] game::check::Error),
+
+    // actor
+    #[error("No active actor")]
+    NoActiveActor,
+}
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    // lifecycle
+    GameStarted,
+    PhaseAdvanced { from: Activity, to: Activity },
+    DayAdvanced { from: DayIndex, to: DayIndex },
+
+    // actor
+    ActorAdvanced { to: Position },
+    ActorCompleted,
+
+    // domain passthrough
+    Game(game::Event),
+}
+
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::GameStarted => {
+                write!(f, "Game has started")
+            }
+            Event::PhaseAdvanced { from, to } => {
+                write!(f, "Game phase advanced from  {from} to {to}")
+            }
+            Event::DayAdvanced { from, to } => {
+                write!(f, "Game day advanced from  {from} to {to}")
+            }
+            Event::ActorAdvanced { to } => {
+                write!(f, "Actor advanced to {to}")
+            }
+            Event::ActorCompleted => {
+                write!(f, "Actor ")
+            }
+            Event::Game(event) => write!(f, "{event}"),
+        }
+    }
 }
 
 impl Snapshot for Engine {
@@ -77,7 +149,8 @@ impl Engine {
     fn join(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_lobby_waiting()?;
 
-        self.game.add_player(name);
+        let mut events = Vec::new();
+        events.extend(self.game.add_player(name)?);
         self.assign_position(name)?;
 
         // As for now position assignment is happning simultaneously with joining,
@@ -86,15 +159,15 @@ impl Engine {
             self.state = EngineState::Lobby(LobbyStatus::Ready);
         }
 
-        Ok(vec![Event::PlayerJoined {
-            name: name.to_string(),
-        }])
+        Ok(events.into_iter().map(Event::Game).collect())
     }
 
     fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
         self.ensure_lobby()?;
-        self.revoke_position(name)?;
-        self.game.remove_player(name);
+        let mut events = Vec::new();
+        events.extend(self.revoke_position(name)?);
+
+        self.game.remove_player(name)?;
 
         // As for now position assignment is happning simultaneously with joining,
         // this is good enough but if seprate those processes later, this logic should be updated
@@ -104,12 +177,12 @@ impl Engine {
             self.state = EngineState::Lobby(LobbyStatus::Waiting);
         }
 
-        Ok(vec![Event::PlayerLeft {
+        Ok(vec![Event::Game(game::Event::PlayerLeft {
             name: name.to_string(),
-        }])
+        })])
     }
 
-    fn assign_position(&mut self, name: &str) -> Result<Vec<Event>> {
+    fn assign_position(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_lobby_waiting()?;
 
         // Pick random seat
@@ -124,12 +197,16 @@ impl Engine {
             .game
             .player_by_name_mut(name)
             .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
-        player.assign_position(position);
+        let events = player.assign_position(position)?;
 
-        Ok(vec![])
+        Ok(events
+            .into_iter()
+            .map(game::Event::Player)
+            .map(Event::Game)
+            .collect())
     }
 
-    fn revoke_position(&mut self, name: &str) -> Result<Vec<Event>> {
+    fn revoke_position(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_lobby()?;
 
         let position = self
@@ -142,10 +219,14 @@ impl Engine {
             .game
             .player_by_name_mut(name)
             .ok_or_else(|| anyhow::anyhow!("Player not found"))?;
-        player.clear_position();
+        let events = player.revoke_position()?;
 
         self.game.return_position(position);
-        Ok(vec![])
+        Ok(events
+            .into_iter()
+            .map(game::Event::Player)
+            .map(Event::Game)
+            .collect())
     }
 
     fn start(&mut self) -> Result<Vec<Event>> {
@@ -181,7 +262,7 @@ impl Engine {
         self.game.take_role(role)?;
 
         let player = self.game.player_by_position_mut(position).unwrap();
-        player.assign_role(role);
+        player.assign_role(role)?;
         Ok(vec![])
     }
 
@@ -192,36 +273,58 @@ impl Engine {
         self.game.return_role(player.role().unwrap());
 
         let player = self.game.player_by_position_mut(position).unwrap();
-        player.clear_role();
+        player.revoke_role()?;
         Ok(vec![])
     }
 
     // ------------------------------
     // Player actions
     // ------------------------------
-    fn warn(&mut self, target: Position) -> Result<Vec<Event>> {
+    // fn warn(&mut self, target: Position) -> Result<Vec<Event>> {
+    //     self.ensure_alive(target)?;
+    //     let player = self.game.player_by_position_mut(target).unwrap();
+    //     player.add_warning()?;
+    //     let warnings = player.warnings();
+    //
+    //     Ok(vec![Event::PlayerWarned { target, warnings }])
+    // }
+    fn warn(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_alive(target)?;
-        let player = self.game.player_by_position_mut(target).unwrap();
-        player.add_warning()?;
-        let warnings = player.warnings();
 
-        Ok(vec![Event::PlayerWarned { target, warnings }])
+        let events = self
+            .game
+            .player_by_position_mut(target)
+            .ok_or(Error::Game(game::Error::PlayerByPositionNotFound(target)))?
+            .warn()?; // returns Vec<player::Event>
+
+        Ok(events
+            .into_iter()
+            .map(game::Event::Player)
+            .map(Event::Game)
+            .collect())
     }
 
     fn pardon(&mut self, target: Position) -> Result<Vec<Event>> {
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
-        player.remove_warning()?;
-        let warnings = player.warnings();
-        Ok(vec![Event::PlayerPardoned { target, warnings }])
+        let events = player.pardon()?;
+        Ok(events
+            .into_iter()
+            .map(game::Event::Player)
+            .map(Event::Game)
+            .collect())
     }
 
-    fn shoot(&mut self, target: Position) -> Result<Vec<Event>> {
+    fn shoot(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
-        player.mark_dead();
+        let events = player.mark_dead()?;
         self.game.record_mafia_kill(self.day, target)?;
-        Ok(vec![Event::PlayerKilled { target }])
+        Ok(events
+            .into_iter()
+            .map(game::Event::Player)
+            .map(Event::Game)
+            .collect())
     }
 
     fn check(&mut self, target: Position) -> Result<Vec<Event>> {
@@ -252,7 +355,7 @@ impl Engine {
 
     fn guess(&mut self, geusses: &[Position]) -> Result<Vec<Event>> {
         for guess in geusses {
-            self.game.record_guess(*guess);
+            self.game.record_guess(*guess)?;
         }
         Ok(vec![])
     }
@@ -266,8 +369,8 @@ impl Engine {
         self.ensure_alive(by)?;
         self.ensure_alive(target)?;
 
-        self.game.add_nomination(self.day, by, target)?;
-        Ok(vec![Event::PlayerNominated { by, target }])
+        let events = self.game.add_nomination(self.day, by, target)?;
+        Ok(events.into_iter().map(Event::Game).collect())
     }
 
     fn vote(&mut self, voters: Vec<Position>) -> Result<Vec<Event>> {
@@ -280,10 +383,10 @@ impl Engine {
                     .actor
                     .current()
                     .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
-                let voting = self.game.voting_mut().entry(self.day).or_default();
 
                 for voter in voters {
-                    voting.record_vote(voter, nominee);
+                    self.game
+                        .add_vote(self.day, game::Pool::Main, voter, nominee)?;
                 }
             }
 
@@ -293,19 +396,22 @@ impl Engine {
                     .actor
                     .current()
                     .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
-                let voting = self.game.tie_voting_mut().entry(self.day).or_default();
 
                 for voter in voters {
-                    voting.record_vote(voter, nominee);
+                    self.game
+                        .add_vote(self.day, game::Pool::Tie, voter, nominee)?;
                 }
             }
 
             // ---------- FINAL YES / NO ----------
             Activity::Evening(EveningActivity::FinalVoting) => {
-                let yes_votes = self.game.final_voting_mut().entry(self.day).or_default();
-
                 for voter in voters {
-                    yes_votes.push(voter);
+                    self.game.add_vote(
+                        self.day,
+                        game::Pool::Final,
+                        voter,
+                        Position::new(0), /* placholder TODO */
+                    )?;
                 }
             }
 
@@ -354,10 +460,13 @@ impl Engine {
                     );
 
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at role assignment"),
@@ -381,10 +490,13 @@ impl Engine {
                             .expect("Don must have assigned position"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at sheriff reveal"),
@@ -405,10 +517,13 @@ impl Engine {
                     // will fix this to avoid missunderstanding
                     self.actor.reset(self.first_speaker_of_day());
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at don reveal"),
@@ -418,7 +533,10 @@ impl Engine {
             Night(MafiaBriefing) => {
                 self.actor.reset(self.first_speaker_of_day());
                 self.set_phase(next)?;
-                vec![Event::PhaseAdvanced { phase: next }]
+                vec![Event::PhaseAdvanced {
+                    from: current,
+                    to: next,
+                }]
             }
 
             Night(MafiaShooting) => {
@@ -430,7 +548,10 @@ impl Engine {
                         .expect("Sheriff must have assigned position"),
                 );
                 self.set_phase(next)?;
-                vec![Event::PhaseAdvanced { phase: next }]
+                vec![Event::PhaseAdvanced {
+                    from: current,
+                    to: next,
+                }]
             }
             Night(SheriffCheck) => {
                 self.game.next_actor(&mut self.actor, |pos| {
@@ -449,10 +570,13 @@ impl Engine {
                             .expect("Don must have assigned position"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at sheriff reveal"),
@@ -471,7 +595,10 @@ impl Engine {
                     if next == Noon(Discussion) {
                         self.actor.reset(self.first_speaker_of_day());
                         self.set_phase(next)?;
-                        vec![Event::PhaseAdvanced { phase: next }]
+                        vec![Event::PhaseAdvanced {
+                            from: current,
+                            to: next,
+                        }]
                     } else {
                         self.actor.reset(
                             *self
@@ -480,11 +607,14 @@ impl Engine {
                                 .expect("Killed player must exist"),
                         );
                         self.set_phase(next)?;
-                        vec![Event::PhaseAdvanced { phase: next }]
+                        vec![Event::PhaseAdvanced {
+                            from: current,
+                            to: next,
+                        }]
                     }
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at don reveal"),
@@ -513,10 +643,13 @@ impl Engine {
                             .expect("Killed player must exist"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at don reveal"),
@@ -538,10 +671,13 @@ impl Engine {
                 if self.actor.is_completed() {
                     self.actor.reset(self.first_speaker_of_day());
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![Event::ActorAdvanced {
-                        chair: self
+                        to: self
                             .actor
                             .current()
                             .expect("Actor must exist at don reveal"),
@@ -569,7 +705,10 @@ impl Engine {
                     self.actor.reset(self.first_speaker_of_day());
                     self.set_phase(next)?;
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![]
                 }
@@ -585,7 +724,10 @@ impl Engine {
                     .get_nominees();
                 self.actor.reset(nominees[0]);
                 self.set_phase(next)?;
-                vec![Event::PhaseAdvanced { phase: next }]
+                vec![Event::PhaseAdvanced {
+                    from: current,
+                    to: next,
+                }]
             }
             Evening(Voting) => {
                 let voting = self
@@ -604,7 +746,7 @@ impl Engine {
                         self.game
                             .player_by_position_mut(winners[0])
                             .unwrap()
-                            .mark_eliminated();
+                            .mark_eliminated()?;
                         self.actor.reset(winners[0]);
                         self.set_phase(next)?;
                     } else {
@@ -620,7 +762,10 @@ impl Engine {
                         self.actor.reset(tie_nominees[0]);
                         self.set_phase(next)?;
                     }
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![]
                 }
@@ -637,7 +782,10 @@ impl Engine {
                 if self.actor.is_completed() {
                     self.actor.reset(voting.get_nominees()[0]);
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![]
                 }
@@ -659,14 +807,17 @@ impl Engine {
                         self.game
                             .player_by_position_mut(winners[0])
                             .unwrap()
-                            .mark_eliminated();
+                            .mark_eliminated()?;
                         self.actor.reset(winners[0]);
                         self.set_phase(next)?;
                     } else {
                         self.set_phase(next)?;
                     }
 
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![]
                 }
@@ -678,7 +829,7 @@ impl Engine {
                     .get(&self.day)
                     .expect("Final voting results")
                     .len();
-                let alive_count = self.game.alive_players().len();
+                let alive_count = self.game.alive_players();
 
                 let nominees = self
                     .game
@@ -693,7 +844,7 @@ impl Engine {
                         self.game
                             .player_by_position_mut(*nominee)
                             .unwrap()
-                            .mark_eliminated();
+                            .mark_eliminated()?;
                     }
                     self.actor.reset(nominees[0]);
                 } else {
@@ -702,7 +853,10 @@ impl Engine {
                 }
 
                 self.set_phase(next)?;
-                vec![Event::PhaseAdvanced { phase: next }]
+                vec![Event::PhaseAdvanced {
+                    from: current,
+                    to: next,
+                }]
             }
             Evening(FinalSpeech) => {
                 let eliminated = self
@@ -719,7 +873,10 @@ impl Engine {
                 if self.actor.is_completed() {
                     self.set_phase(next)?;
                     self.day.advance();
-                    vec![Event::PhaseAdvanced { phase: next }]
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
                 } else {
                     vec![]
                 }
@@ -814,7 +971,7 @@ impl Engine {
                     .get(&self.day)
                     .expect("Final voting results")
                     .len();
-                let alive_count = self.game.alive_players().len();
+                let alive_count = self.game.alive_players();
                 if yes_count > alive_count / 2 {
                     Evening(FinalSpeech)
                 } else {
@@ -972,29 +1129,4 @@ impl Engine {
         }
         Ok(())
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum EngineError {
-    #[error("Cannot join, no available seats")]
-    NoAvailableSeats,
-    #[error("Cannot assign role, no available roles")]
-    NoAvailableRoles,
-    #[error("Cannot join after registration")]
-    RegistrationClosed,
-    #[error("Player not found")]
-    PlayerNotFound,
-    #[error("Player assignment failed")]
-    PlayerAssignmentFailed,
-    #[error("Wrong phase. Expected {expected:?}, got {current:?}")]
-    WrongPhase {
-        expected: Activity,
-        current: Activity,
-    },
-    #[error("Player {0:?} is dead")]
-    PlayerDead(Position),
-    #[error("No active speaker")]
-    NoActiveSpeaker,
-    #[error("Player at chair {0:?} has already nominated this round")]
-    AlreadyNominated(Position),
 }

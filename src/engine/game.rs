@@ -3,6 +3,7 @@ pub mod player;
 pub mod voting;
 
 use std::collections::HashMap;
+use std::fmt::{self};
 
 use crate::domain::{DayIndex, Position, Role};
 use crate::engine::{
@@ -13,14 +14,85 @@ use crate::snapshot::{self, Snapshot};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Invalid position {0}")]
-    InvalidPosition(u8),
+    // #[error("Invalid position {0}")]
+    // InvalidPosition(u8),
     #[error("Player not found at position {0:?}")]
-    PlayerNotFound(Position),
+    PlayerByPositionNotFound(Position),
+
+    #[error("Player not found by name {0:?}")]
+    PlayerByNameNotFound(String),
+
+    #[error("Player by name {0:?} already exist")]
+    PlayerByNameAlreadyExist(String),
+
+    #[error("Player Name is emmpty")]
+    PlayerNameIsEmpty,
+
     #[error("No available roles left")]
     NoAvailableRoles,
+
     #[error("No available positions left")]
     NoAvailablePositions,
+
+    #[error(transparent)]
+    Player(#[from] player::Error),
+
+    #[error(transparent)]
+    Check(#[from] check::Error),
+
+    #[error(transparent)]
+    Voting(#[from] voting::Error),
+}
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    PlayerLeft {
+        name: String,
+    },
+    PlayerJoin {
+        name: String,
+    },
+    Player(player::Event),
+    Check(check::Event),
+    Voting(voting::Event),
+    FinalVoting(Position),
+    MafiaKill {
+        position: Position,
+    },
+    Guess {
+        position: Position,
+    },
+    Eliminated {
+        day: DayIndex,
+        positions: Vec<Position>,
+    },
+}
+
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::PlayerLeft { name } => {
+                write!(f, "Player  {name}, left the lobby")
+            }
+            Event::PlayerJoin { name } => {
+                write!(f, "Player  {name}, joined to the lobby")
+            }
+            Event::Player(event) => write!(f, "{event}"),
+            Event::Voting(event) => write!(f, "{event}"),
+            Event::Check(event) => write!(f, "{event}"),
+            Event::MafiaKill { position } => {
+                write!(f, "Mafia has shoot {position}")
+            }
+            Event::Guess { position } => write!(f, "Dead player has guessed {position}"),
+            Event::Eliminated { day, positions } => write!(
+                f,
+                "After day {} players at position {} were eliminated",
+                day.current(),
+                positions.iter().map(|p| p.to_string()).collect::<String>()
+            ),
+            Event::FinalVoting(position) => write!(f, "Final Voting {position}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +107,13 @@ pub struct Game {
     eliminated: HashMap<DayIndex, Vec<Position>>,
     roles_pool: Vec<Role>,
     positions_pool: Vec<Position>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Pool {
+    Main,
+    Tie,
+    Final,
 }
 
 impl Snapshot for Game {
@@ -170,109 +249,32 @@ impl Game {
         }
     }
 
-    /* ---------------- Votes & Nominations ---------------- */
-
-    pub fn add_nomination(
-        &mut self,
-        day: DayIndex,
-        nominator: Position,
-        nominee: Position,
-    ) -> Result<(), Error> {
-        let voting = self.voting.entry(day).or_default();
-        voting.record_nomination(nominator, nominee);
-        Ok(())
-    }
-
-    pub fn add_vote(
-        &mut self,
-        day: DayIndex,
-        voter: Position,
-        nominee: Position,
-    ) -> Result<(), Error> {
-        let voting = self.voting.entry(day).or_default();
-        voting.record_vote(voter, nominee);
-        Ok(())
-    }
-
-    pub fn voting(&self) -> &HashMap<DayIndex, Voting> {
-        &self.voting
-    }
-
-    pub fn tie_voting(&self) -> &HashMap<DayIndex, Voting> {
-        &self.tie_voting
-    }
-
-    pub fn voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
-        &mut self.voting
-    }
-
-    pub fn tie_voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
-        &mut self.tie_voting
-    }
-
-    pub fn final_voting(&self) -> &HashMap<DayIndex, Vec<Position>> {
-        &self.final_voting
-    }
-
-    pub fn final_voting_mut(&mut self) -> &mut HashMap<DayIndex, Vec<Position>> {
-        &mut self.final_voting
-    }
-
-    /*---------------- Checks ---------------- */
-    pub fn record_sheriff_check(&mut self, day: DayIndex, checked: Position) -> Result<(), Error> {
-        let check = self.check.entry(day).or_default();
-        check.record_sheriff_check(checked);
-        Ok(())
-    }
-
-    pub fn record_don_check(&mut self, day: DayIndex, checked: Position) -> Result<(), Error> {
-        let check = self.check.entry(day).or_default();
-        check.record_don_check(checked);
-        Ok(())
-    }
-
-    pub fn record_mafia_kill(&mut self, day: DayIndex, killed: Position) -> Result<(), Error> {
-        self.kill.entry(day).or_insert(killed);
-        Ok(())
-    }
-
-    pub fn record_eliminated(
-        &mut self,
-        day: DayIndex,
-        eliminated: &[Position],
-    ) -> Result<(), Error> {
-        self.eliminated.entry(day).or_default().extend(eliminated);
-        Ok(())
-    }
-
-    pub fn record_guess(&mut self, guess: Position) -> Result<(), Error> {
-        self.guess.push(guess);
-        Ok(())
-    }
-
-    pub fn get_kill(&self, day: DayIndex) -> Option<&Position> {
-        self.kill.get(&day)
-    }
-
-    pub fn get_eliminated(&self, day: DayIndex) -> Option<&Vec<Position>> {
-        self.eliminated.get(&day)
-    }
     // ---------------- Players ----------------
-    pub fn add_player(&mut self, name: &str) -> Result<(), String> {
+    pub fn add_player(&mut self, name: &str) -> Result<Vec<Event>, Error> {
+        if name.is_empty() {
+            return Err(Error::PlayerNameIsEmpty);
+        }
+        if self.players.iter().any(|p| p.name() == name) {
+            return Err(Error::PlayerByNameAlreadyExist(name.to_string()));
+        }
         if self.players.len() >= Self::PLAYER_COUNT as usize {
-            return Err("Maximum number of players reached".to_string());
+            return Err(Error::Player(player::Error::HasPosition));
         }
 
         self.players.push(Player::new(name.to_string()));
-        Ok(())
+        Ok(vec![Event::PlayerJoin {
+            name: name.to_string(),
+        }])
     }
 
-    pub fn remove_player(&mut self, name: &str) -> Result<(), String> {
+    pub fn remove_player(&mut self, name: &str) -> Result<Vec<Event>, Error> {
         if let Some(pos) = self.players.iter().position(|p| p.name() == name) {
             self.players.remove(pos);
-            Ok(())
+            Ok(vec![Event::PlayerLeft {
+                name: name.to_string(),
+            }])
         } else {
-            Err("Player not found".to_string())
+            Err(Error::PlayerByNameNotFound(name.to_string()))
         }
     }
 
@@ -284,8 +286,10 @@ impl Game {
         &mut self.players
     }
 
-    pub fn alive_players(&self) -> Vec<&Player> {
-        self.players.iter().filter(|p| p.is_alive()).collect()
+    pub fn alive_players(&self) -> usize {
+        self.players
+            .iter()
+            .fold(0, |c, p| if p.is_alive() { c + 1 } else { c })
     }
 
     pub fn player_by_position(&self, position: Position) -> Option<&Player> {
@@ -314,6 +318,125 @@ impl Game {
 
     pub fn don(&self) -> Option<&Player> {
         self.players.iter().find(|p| p.role() == Some(Role::Don))
+    }
+
+    /*---------------- Checks ---------------- */
+    pub fn record_sheriff_check(
+        &mut self,
+        day: DayIndex,
+        check: Position,
+    ) -> Result<Vec<Event>, Error> {
+        let events = self
+            .check
+            .entry(day)
+            .or_default()
+            .record_sheriff_check(check)?;
+        Ok(events.into_iter().map(Event::Check).collect())
+    }
+
+    pub fn record_don_check(
+        &mut self,
+        day: DayIndex,
+        checked: Position,
+    ) -> Result<Vec<Event>, Error> {
+        let events = self
+            .check
+            .entry(day)
+            .or_default()
+            .record_don_check(checked)?;
+        Ok(events.into_iter().map(Event::Check).collect())
+    }
+
+    pub fn record_mafia_kill(
+        &mut self,
+        day: DayIndex,
+        killed: Position,
+    ) -> Result<Vec<Event>, Error> {
+        self.kill.entry(day).or_insert(killed);
+        Ok(vec![Event::MafiaKill { position: killed }])
+    }
+
+    pub fn record_eliminated(
+        &mut self,
+        day: DayIndex,
+        eliminated: &[Position],
+    ) -> Result<Vec<Event>, Error> {
+        self.eliminated.entry(day).or_default().extend(eliminated);
+        Ok(vec![Event::Eliminated {
+            day,
+            positions: eliminated.to_vec(),
+        }])
+    }
+
+    pub fn record_guess(&mut self, guess: Position) -> Result<Vec<Event>, Error> {
+        self.guess.push(guess);
+        Ok(vec![Event::Guess { position: guess }])
+    }
+
+    /* ---------------- Votes & Nominations ---------------- */
+
+    pub fn add_nomination(
+        &mut self,
+        day: DayIndex,
+        nominator: Position,
+        nominee: Position,
+    ) -> Result<Vec<Event>, Error> {
+        let events = self
+            .voting
+            .entry(day)
+            .or_default()
+            .nominate(nominator, nominee)?;
+        Ok(events.into_iter().map(Event::Voting).collect())
+    }
+
+    pub fn add_vote(
+        &mut self,
+        day: DayIndex,
+        pool: Pool,
+        voter: Position,
+        nominee: Position,
+    ) -> Result<Vec<Event>, Error> {
+        match pool {
+            Pool::Main => {
+                let voting = self.voting.entry(day).or_default();
+                let events = voting.vote(voter, nominee)?;
+                Ok(events.into_iter().map(Event::Voting).collect())
+            }
+            Pool::Tie => {
+                let voting = self.tie_voting.entry(day).or_default();
+                let events = voting.vote(voter, nominee)?;
+                Ok(events.into_iter().map(Event::Voting).collect())
+            }
+            Pool::Final => {
+                let voting = self.final_voting.entry(day).or_default();
+                voting.push(voter);
+                Ok(vec![Event::FinalVoting(voter)])
+            }
+        }
+    }
+
+    pub fn voting(&self) -> &HashMap<DayIndex, Voting> {
+        &self.voting
+    }
+
+    pub fn tie_voting(&self) -> &HashMap<DayIndex, Voting> {
+        &self.tie_voting
+    }
+
+    pub fn tie_voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
+        &mut self.tie_voting
+    }
+
+    pub fn final_voting(&self) -> &HashMap<DayIndex, Vec<Position>> {
+        &self.final_voting
+    }
+
+    pub fn get_kill(&self, day: DayIndex) -> Option<&Position> {
+        self.kill.get(&day)
+    }
+
+    pub fn get_eliminated(&self, day: DayIndex) -> Option<&Vec<Position>> {
+        self.eliminated.get(&day)
     }
 
     // ---------------- Roles ----------------

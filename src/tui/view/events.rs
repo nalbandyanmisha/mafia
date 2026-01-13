@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct EventsView {
-    pub messages: Vec<String>,
+    pub messages: Vec<crate::app::events::Event>,
 }
 
 impl EventsView {
@@ -8,7 +8,7 @@ impl EventsView {
         // For now, we assume `app.events` exists as Vec<String>
         // Adjust if your snapshot stores events differently
         Self {
-            messages: Vec::new(),
+            messages: app.events.clone(),
         }
     }
 }

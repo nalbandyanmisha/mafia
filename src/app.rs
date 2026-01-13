@@ -19,6 +19,7 @@ pub struct App {
     pub status: AppStatus,
     pub input: String,
 
+    pub events: Vec<AppEvent>,
     pub current_timer: Option<u64>, // <- NEW: store timer
     pub event_tx: mpsc::Sender<AppEvent>,
 }
@@ -31,6 +32,7 @@ impl Snapshot for App {
             engine: self.engine.snapshot(),
             input: self.input.clone(),
             current_timer: self.current_timer,
+            events: self.events.clone(),
         }
     }
 }
@@ -41,6 +43,7 @@ impl App {
             engine: Engine::new(),
             status: AppStatus::Running,
             input: String::new(),
+            events: Vec::new(),
             current_timer: None,
             event_tx,
         }
@@ -65,92 +68,199 @@ impl App {
                     let _ = tx.send(AppEvent::TimerEnded).await;
                 });
             }
-            Join { name } => {
-                let _ = self.engine.apply(EngineCommand::Join { name });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            Leave { name } => {
-                let _ = self.engine.apply(EngineCommand::Leave { name });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
+            Join { name } => match self.engine.apply(EngineCommand::Join { name }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+            Leave { name } => match self.engine.apply(EngineCommand::Leave { name }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
 
-            Start => {
-                let _ = self.engine.apply(EngineCommand::Start);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
+            Start => match self.engine.apply(EngineCommand::Start) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
 
-            Next => {
-                let _ = self.engine.apply(EngineCommand::Advance);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
+            Next => match self.engine.apply(EngineCommand::Advance) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
 
-            AssignRole => {
-                let _ = self.engine.apply(EngineCommand::AssignRole);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            RevokeRole => {
-                let _ = self.engine.apply(EngineCommand::RevokeRole);
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            Warn { position } => {
-                let _ = self.engine.apply(EngineCommand::Warn {
-                    target: position.into(),
-                });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            Pardon { position } => {
-                let _ = self.engine.apply(EngineCommand::Pardon {
-                    target: position.into(),
-                });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            Nominate { position } => {
-                let _ = self.engine.apply(EngineCommand::Nominate {
-                    target: position.into(),
-                });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
+            AssignRole => match self.engine.apply(EngineCommand::AssignRole) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
+            RevokeRole => match self.engine.apply(EngineCommand::RevokeRole) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
+            Warn { position } => match self.engine.apply(EngineCommand::Warn {
+                target: position.into(),
+            }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
+            Pardon { position } => match self.engine.apply(EngineCommand::Pardon {
+                target: position.into(),
+            }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
+            Nominate { position } => match self.engine.apply(EngineCommand::Nominate {
+                target: position.into(),
+            }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
             Vote { positions } => {
                 let mut targets = Vec::new();
                 for pos in positions {
                     targets.push(pos.into());
                 }
-                let _ = self.engine.apply(EngineCommand::Vote { targets });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+
+                match self.engine.apply(EngineCommand::Vote { targets }) {
+                    Ok(events) => {
+                        for event in events {
+                            let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                    }
+                }
             }
-            Shoot { position } => {
-                let _ = self.engine.apply(EngineCommand::Shoot {
-                    target: position.into(),
-                });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
-            Check { position } => {
-                let _ = self.engine.apply(EngineCommand::Check {
-                    target: position.into(),
-                });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
-            }
+
+            Shoot { position } => match self.engine.apply(EngineCommand::Shoot {
+                target: position.into(),
+            }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
+            Check { position } => match self.engine.apply(EngineCommand::Check {
+                target: position.into(),
+            }) {
+                Ok(events) => {
+                    for event in events {
+                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                    }
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
+
             Guess { targets } => {
                 let mut positions = Vec::new();
                 for target in targets {
                     positions.push(target.into());
                 }
-                let _ = self
+
+                match self
                     .engine
-                    .apply(EngineCommand::Vote { targets: positions });
-                let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                    .apply(EngineCommand::Vote { targets: positions })
+                {
+                    Ok(events) => {
+                        for event in events {
+                            let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                    }
+                }
             }
+
             Assign { command } => {
                 let command = command.unwrap_or(commands::AssignCommand::Role { role: None });
 
-                match command {
+                let result = match command {
                     commands::AssignCommand::Player { name } => {
-                        let _ = self.engine.apply(EngineCommand::Join { name });
-                        let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                        self.engine.apply(EngineCommand::Join { name })
                     }
                     commands::AssignCommand::Role { role } => {
-                        let _ = self.engine.apply(EngineCommand::AssignRole);
-                        let _ = self.event_tx.send(AppEvent::EngineUpdated).await;
+                        if role.is_none() {
+                            self.engine.apply(EngineCommand::AssignRole)
+                        } else {
+                            Ok(vec![])
+                        }
+                    }
+                };
+
+                match result {
+                    Ok(events) => {
+                        for event in events {
+                            let _ = self.event_tx.send(AppEvent::Engine(event)).await;
+                        }
+                    }
+                    Err(err) => {
+                        let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
                     }
                 }
             }

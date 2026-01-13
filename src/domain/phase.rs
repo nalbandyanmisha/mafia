@@ -1,9 +1,23 @@
+use std::fmt;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Day {
     Night,
     Morning,
     Noon,
     Evening,
+}
+
+impl fmt::Display for Day {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Day::*;
+        match self {
+            Night => write!(f, "Night"),
+            Morning => write!(f, "Mornig"),
+            Noon => write!(f, "Noon"),
+            Evening => write!(f, "Evening"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,15 +31,49 @@ pub enum NightActivity {
     DonCheck,
 }
 
+impl fmt::Display for NightActivity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NightActivity::*;
+        match self {
+            RoleAssignment => write!(f, "Role Assignment"),
+            SheriffReveal => write!(f, "Sheriff Reveal"),
+            DonReveal => write!(f, "Don Reveal"),
+            MafiaBriefing => write!(f, "Mafia Briefing"),
+            MafiaShooting => write!(f, "Mafia Assignment"),
+            SheriffCheck => write!(f, "Role Shooting"),
+            DonCheck => write!(f, "Don Check"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MorningActivity {
     DeathSpeech, // optional, single actor
     Guessing,    // optional, single actor, 3 guesses
 }
 
+impl fmt::Display for MorningActivity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use MorningActivity::*;
+        match self {
+            DeathSpeech => write!(f, "Death Speech"),
+            Guessing => write!(f, "Guessing"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoonActivity {
     Discussion,
+}
+
+impl fmt::Display for NoonActivity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NoonActivity::*;
+        match self {
+            Discussion => write!(f, "Discussion"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,12 +86,38 @@ pub enum EveningActivity {
     FinalSpeech,
 }
 
+impl fmt::Display for EveningActivity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use EveningActivity::*;
+        match self {
+            NominationAnnouncement => write!(f, "Nomination Announcement"),
+            Voting => write!(f, "Voting"),
+            TieDiscussion => write!(f, "Tie Discussion"),
+            TieVoting => write!(f, "Tie Voting"),
+            FinalVoting => write!(f, "Final Voting"),
+            FinalSpeech => write!(f, "Final Speech"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Activity {
     Night(NightActivity),
     Morning(MorningActivity),
     Noon(NoonActivity),
     Evening(EveningActivity),
+}
+
+impl fmt::Display for Activity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Activity::*;
+        match self {
+            Night(activity) => write!(f, "Night {activity}"),
+            Morning(activity) => write!(f, "Mornig {activity}"),
+            Noon(activity) => write!(f, "Noon {activity}"),
+            Evening(activity) => write!(f, "Evening {activity}"),
+        }
+    }
 }
 
 impl Activity {

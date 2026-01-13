@@ -2,7 +2,7 @@ use ratatui::{
     Frame,
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 use crate::{tui::layout, tui::view::events::EventsView};
@@ -21,9 +21,12 @@ pub fn draw(frame: &mut Frame, layout: &layout::Events, view: &EventsView) {
     } else {
         view.messages
             .iter()
-            .map(|m| Line::from(m.clone()))
+            .map(|m| Line::from(m.to_string().clone()))
             .collect()
     };
 
-    frame.render_widget(Paragraph::new(lines), layout.content);
+    frame.render_widget(
+        Paragraph::new(lines).wrap(Wrap { trim: true }),
+        layout.content,
+    );
 }
