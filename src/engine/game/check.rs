@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::fmt;
 
 use crate::{
@@ -23,7 +24,7 @@ pub struct Check {
     don: Option<Position>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     SheriffChecked { chair: Position },
     DonChecked { chair: Position },

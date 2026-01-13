@@ -2,6 +2,7 @@ pub mod check;
 pub mod player;
 pub mod voting;
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::{self};
 
@@ -44,7 +45,7 @@ pub enum Error {
     Voting(#[from] voting::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     PlayerLeft {
         name: String,

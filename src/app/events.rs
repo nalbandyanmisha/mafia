@@ -1,10 +1,12 @@
+use serde::Serialize;
 use std::fmt;
 
 use crate::engine::Event as EngineEvent;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     Engine(EngineEvent),
+    End,
     TimerStarted(u64),
     TimerTick(u64),
     TimerEnded,
@@ -27,6 +29,7 @@ impl fmt::Display for Event {
             Event::InputChar(c) => write!(f, "Input: {c}"),
             Event::InputBackspace => write!(f, "Input: Backspace"),
             Event::InputEnter => write!(f, "Input: Enter"),
+            Event::End => write!(f, "End game"),
         }
     }
 }

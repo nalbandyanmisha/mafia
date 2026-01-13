@@ -1,6 +1,7 @@
+use serde::Serialize;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Day {
     Night,
     Morning,
@@ -20,7 +21,7 @@ impl fmt::Display for Day {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum NightActivity {
     RoleAssignment, // game setup zero night only
     SheriffReveal,
@@ -46,7 +47,7 @@ impl fmt::Display for NightActivity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum MorningActivity {
     DeathSpeech, // optional, single actor
     Guessing,    // optional, single actor, 3 guesses
@@ -62,7 +63,7 @@ impl fmt::Display for MorningActivity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum NoonActivity {
     Discussion,
 }
@@ -76,7 +77,7 @@ impl fmt::Display for NoonActivity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum EveningActivity {
     NominationAnnouncement,
     Voting,
@@ -100,7 +101,7 @@ impl fmt::Display for EveningActivity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Activity {
     Night(NightActivity),
     Morning(MorningActivity),
@@ -131,7 +132,7 @@ impl Activity {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct DayIndex(pub usize);
 
 impl DayIndex {

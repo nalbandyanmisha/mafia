@@ -6,6 +6,7 @@ pub mod turn;
 use std::fmt;
 
 use actor::Actor;
+use serde::Serialize;
 use turn::Turn;
 
 use self::{commands::Command, game::Game};
@@ -43,7 +44,7 @@ pub enum Error {
     Check(#[from] game::check::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     // lifecycle
     GameStarted,

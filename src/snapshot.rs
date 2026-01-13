@@ -1,4 +1,5 @@
 use crate::domain::{Activity, EngineState, Position, Role, Status};
+use serde::Serialize;
 use std::collections::HashMap;
 
 pub trait Snapshot {
@@ -7,7 +8,7 @@ pub trait Snapshot {
     fn snapshot(&self) -> Self::Output;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Player {
     pub name: String,
     pub position: Option<Position>,
@@ -16,20 +17,20 @@ pub struct Player {
     pub status: Status,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize)]
 pub struct Check {
     pub sheriff: Option<Position>,
     pub don: Option<Position>,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize)]
 pub struct Voting {
     pub nominations: HashMap<Position, Position>,
     pub nominees: Vec<Position>,
     pub votes: HashMap<Position, Vec<Position>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Game {
     pub players: Vec<Player>,
     pub kill: HashMap<usize, Position>,
@@ -41,7 +42,7 @@ pub struct Game {
     pub eliminated: HashMap<usize, Vec<Position>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Engine {
     pub game: Game,
     pub phase: Option<Activity>,
@@ -50,7 +51,7 @@ pub struct Engine {
     pub actor: Option<Position>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct App {
     pub engine: Engine,
     pub input: String,

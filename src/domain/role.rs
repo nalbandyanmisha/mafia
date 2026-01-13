@@ -1,7 +1,8 @@
 use clap::ValueEnum;
+use serde::Serialize;
 use std::fmt::Display;
 use std::str::FromStr;
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Copy, ValueEnum)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Copy, ValueEnum, Serialize)]
 pub enum Role {
     #[default]
     Citizen,

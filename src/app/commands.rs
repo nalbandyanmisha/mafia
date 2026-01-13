@@ -49,6 +49,9 @@ pub enum Command {
     Timer {
         seconds: u64,
     },
+    End {
+        file_name: String,
+    },
     Quit,
 }
 

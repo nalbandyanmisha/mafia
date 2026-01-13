@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::{collections::HashMap, fmt};
 
 use crate::{
@@ -13,7 +14,7 @@ pub struct Voting {
     votes: HashMap<Position, Vec<Position>>,  // nominee -> voters
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     Nominated {
         nominator: Position,

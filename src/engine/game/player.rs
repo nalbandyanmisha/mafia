@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::fmt;
 
 use crate::domain::{position::Position, role::Role, status::Status};
@@ -31,7 +32,7 @@ pub enum Error {
     NoWarnings,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Event {
     PositionAssigned {
         name: String,

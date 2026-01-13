@@ -64,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
                             app.events.remove(0);
                         }
                     }
+                    AppEvent::End => {},
                     AppEvent::TimerStarted(s) => app.current_timer = Some(s),
                     AppEvent::TimerTick(s) => app.current_timer = Some(s),
                     AppEvent::TimerEnded => app.current_timer = None,

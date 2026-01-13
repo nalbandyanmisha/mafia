@@ -6,6 +6,9 @@ use crate::app::{commands::Command as AppCommand, events::Event as AppEvent};
 use crate::engine::{Engine, commands::Command as EngineCommand};
 use crate::snapshot::{self, Snapshot};
 use clap::Parser;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -52,6 +55,17 @@ impl App {
         }
     }
 
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
+        let snapshot = self.snapshot();
+
+        let json = serde_json::to_string_pretty(&snapshot)?;
+
+        let mut file = File::create(path)?;
+        file.write_all(json.as_bytes())?;
+
+        Ok(())
+    }
+
     pub async fn handle_command(&mut self, cmd: AppCommand) {
         use AppCommand::*;
 
@@ -60,6 +74,14 @@ impl App {
                 let _ = self.event_tx.send(AppEvent::QuitRequested).await;
                 self.status = AppStatus::Quit;
             }
+            End { file_name } => match self.save_to_file(file_name) {
+                Ok(_) => {
+                    let _ = self.event_tx.send(AppEvent::End).await;
+                }
+                Err(err) => {
+                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+                }
+            },
             Timer { seconds } => {
                 if let Some(task) = self.timer_task.take() {
                     task.abort();

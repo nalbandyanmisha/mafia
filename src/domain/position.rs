@@ -1,8 +1,9 @@
+use serde::Serialize;
 use std::fmt;
 
 use crate::snapshot::Snapshot;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize)]
 pub struct Position(u8);
 
 impl Position {
