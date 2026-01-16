@@ -1,11 +1,18 @@
+pub mod footer;
+pub mod header;
+pub mod main;
+
+pub use footer::Footer;
+pub use header::Header;
+pub use main::Main;
 use ratatui::layout::{Constraint, Layout, Margin, Rect};
 
 #[derive(Debug, Clone)]
 pub struct Host {
     pub area: Rect,
-    pub header: Rect,
-    pub body: Rect,
-    pub footer: Rect,
+    pub header: Header,
+    pub body: Main,
+    pub footer: Footer,
 }
 
 impl Host {
@@ -27,9 +34,10 @@ impl Host {
         // Split vertically: header/body/footer
         let rects = Layout::vertical([
             Constraint::Length(1), // empty line
-            Constraint::Length(1), // header
-            Constraint::Min(3),    // main
+            Constraint::Length(2), // header
+            Constraint::Min(6),    // main
             Constraint::Length(1), // footer
+            Constraint::Length(1), // empty line
         ])
         .split(area.inner(Margin {
             vertical: 1,
@@ -38,9 +46,9 @@ impl Host {
 
         Self {
             area,
-            header: rects[1],
-            body: rects[2],
-            footer: rects[3],
+            header: Header::new(rects[1]),
+            body: Main::new(rects[2]),
+            footer: Footer::new(rects[3]),
         }
     }
 }

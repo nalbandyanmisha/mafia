@@ -40,8 +40,8 @@ impl fmt::Display for NightActivity {
             SheriffReveal => write!(f, "Sheriff Reveal"),
             DonReveal => write!(f, "Don Reveal"),
             MafiaBriefing => write!(f, "Mafia Briefing"),
-            MafiaShooting => write!(f, "Mafia Assignment"),
-            SheriffCheck => write!(f, "Role Shooting"),
+            MafiaShooting => write!(f, "Mafia Shooting"),
+            SheriffCheck => write!(f, "Sheriff Check"),
             DonCheck => write!(f, "Don Check"),
         }
     }
@@ -113,10 +113,10 @@ impl fmt::Display for Activity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Activity::*;
         match self {
-            Night(activity) => write!(f, "Night {activity}"),
-            Morning(activity) => write!(f, "Mornig {activity}"),
-            Noon(activity) => write!(f, "Noon {activity}"),
-            Evening(activity) => write!(f, "Evening {activity}"),
+            Night(activity) => write!(f, "{activity}"),
+            Morning(activity) => write!(f, "{activity}"),
+            Noon(activity) => write!(f, "{activity}"),
+            Evening(activity) => write!(f, "{activity}"),
         }
     }
 }

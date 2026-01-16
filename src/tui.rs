@@ -1,4 +1,5 @@
 pub mod layout;
+pub mod util;
 pub mod view;
 pub mod widgets;
 
