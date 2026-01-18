@@ -4,7 +4,7 @@ pub struct Footer {
 }
 
 impl Footer {
-    pub fn new(commands: &[&str]) -> Self {
+    pub fn new(commands: &[String]) -> Self {
         Self {
             commands: commands.join(" | "),
         }

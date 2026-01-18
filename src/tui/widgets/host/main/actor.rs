@@ -12,21 +12,25 @@ pub fn draw(
         text::{Line, Span},
     };
 
-    let mut lines = vec![Line::from(format!("🎭 {}", view.position))];
+    let mut lines = vec![Line::from(view.actor.clone())];
 
-    if let Some(t) = view.timer {
-        lines.push(Line::from(Span::styled(
-            format!("⏱ {t}s"),
+    if let Some(sec) = view.timer {
+        let style = if sec <= 10 {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        } else {
             Style::default()
                 .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
+                .add_modifier(Modifier::BOLD)
+        };
+
+        lines.push(Line::from(Span::styled(
+            format!("⏳ {:02}:{:02}", sec / 60, sec % 60),
+            style,
         )));
     }
 
-    lines.push(Line::from(view.instructions.clone()));
-
     if let Some(r) = &view.result {
-        lines.push(Line::from(format!("✅ {r}")));
+        lines.push(Line::from(r.to_string()));
     }
 
     let text = Text::from(lines);
