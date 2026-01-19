@@ -79,7 +79,6 @@ impl fmt::Display for NoonActivity {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum EveningActivity {
-    NominationAnnouncement,
     Voting,
     TieDiscussion,
     TieVoting,
@@ -91,7 +90,6 @@ impl fmt::Display for EveningActivity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use EveningActivity::*;
         match self {
-            NominationAnnouncement => write!(f, "Nomination Announcement"),
             Voting => write!(f, "Voting"),
             TieDiscussion => write!(f, "Tie Discussion"),
             TieVoting => write!(f, "Tie Voting"),

@@ -1,4 +1,9 @@
-use ratatui::{Frame, layout::Alignment, text::Text, widgets::Paragraph};
+use ratatui::{
+    Frame,
+    layout::Alignment,
+    text::Text,
+    widgets::{Paragraph, Wrap},
+};
 
 use crate::tui::{layout, util::centered_area, view};
 
@@ -12,7 +17,7 @@ pub fn draw(
         text::{Line, Span},
     };
 
-    let mut lines = vec![Line::from(view.actor.clone())];
+    let mut lines: Vec<Line> = view.actor.lines().map(Line::from).collect();
 
     if let Some(sec) = view.timer {
         let style = if sec <= 10 {
@@ -30,13 +35,18 @@ pub fn draw(
     }
 
     if let Some(r) = &view.result {
-        lines.push(Line::from(r.to_string()));
+        lines.extend(r.lines().map(Line::from));
     }
 
     let text = Text::from(lines);
     let centered = centered_area(layout.area, text.height() as u16);
 
-    frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), centered);
+    frame.render_widget(
+        Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true }),
+        centered,
+    );
 
     Ok(())
 }

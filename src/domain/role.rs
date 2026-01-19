@@ -21,10 +21,10 @@ impl Display for Role {
 impl From<Role> for &'static str {
     fn from(r: Role) -> Self {
         match r {
-            Role::Citizen => "citizen",
-            Role::Mafia => "mafia",
-            Role::Don => "don",
-            Role::Sheriff => "sheriff",
+            Role::Citizen => "Citizen",
+            Role::Mafia => "Mafia",
+            Role::Don => "Don",
+            Role::Sheriff => "Sheriff",
         }
     }
 }

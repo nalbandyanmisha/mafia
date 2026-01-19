@@ -13,7 +13,7 @@ use crate::domain::{
     Activity, Day, EveningActivity, MorningActivity, NightActivity, NoonActivity, Position, Role,
     Status,
 };
-use crate::snapshot::{self, Check, Player, Voting};
+use crate::snapshot::{self, Check, Player};
 use ratatui::style::Color;
 
 #[derive(Debug, Clone)]
@@ -37,55 +37,7 @@ impl HostView {
             Day::Evening => (format!("🌆 Evening · {}", engine.day), Color::Blue),
         };
 
-        let host_text = Text::new(
-            phase,
-            engine.actor,
-            &engine.game.players,
-            app.current_timer,
-            engine.day,
-            engine.game.check.clone(),
-            engine.game.guess.clone(),
-            &engine
-                .game
-                .voting
-                .get(&engine.day)
-                .unwrap_or(&Voting::default())
-                .nominations,
-            &engine
-                .game
-                .voting
-                .get(&engine.day)
-                .unwrap_or(&Voting::default())
-                .nominees,
-            &engine
-                .game
-                .tie_voting
-                .get(&engine.day)
-                .unwrap_or(&Voting::default())
-                .nominees,
-            &engine
-                .game
-                .voting
-                .get(&engine.day)
-                .unwrap_or(&Voting::default())
-                .votes,
-            &engine
-                .game
-                .tie_voting
-                .get(&engine.day)
-                .unwrap_or(&Voting::default())
-                .votes,
-            engine
-                .game
-                .final_voting
-                .get(&engine.day)
-                .unwrap_or(&Vec::new()),
-            engine
-                .game
-                .eliminated
-                .get(&engine.day)
-                .unwrap_or(&Vec::new()),
-        );
+        let host_text = Text::new(app);
         let in_p_c = engine
             .game
             .players
@@ -120,6 +72,7 @@ pub struct Text {
 
     // Main content
     pub description: Option<String>,
+    pub context: Option<String>,
     pub actor: Option<String>,
     pub timer: Option<u64>, // future, keep optional
     pub result: Option<String>,
@@ -128,484 +81,600 @@ pub struct Text {
     pub commands: Vec<String>,
 }
 
-impl Text {
-    fn header(title: String, subtitle: Option<String>) -> Self {
+pub struct TextBuilder {
+    text: Text,
+}
+
+impl TextBuilder {
+    pub fn new(title: impl Into<String>) -> Self {
         Self {
-            title,
-            subtitle,
-            description: None,
-            actor: None,
-            timer: None,
-            result: None,
-            commands: Vec::new(),
+            text: Text {
+                title: title.into(),
+                subtitle: None,
+                description: None,
+                context: None,
+                actor: None,
+                timer: None,
+                result: None,
+                commands: Vec::new(),
+            },
         }
     }
 
-    fn role_assignment(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
+    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
+        self.text.subtitle = Some(s.into());
+        self
+    }
+
+    pub fn description(mut self, s: impl Into<String>) -> Self {
+        self.text.description = Some(s.into());
+        self
+    }
+
+    pub fn context(mut self, s: impl Into<String>) -> Self {
+        self.text.context = Some(s.into());
+        self
+    }
+
+    pub fn actor(mut self, s: impl Into<String>) -> Self {
+        self.text.actor = Some(s.into());
+        self
+    }
+
+    pub fn timer(mut self, t: Option<u64>) -> Self {
+        self.text.timer = t;
+        self
+    }
+
+    pub fn result(mut self, s: impl Into<String>) -> Self {
+        self.text.result = Some(s.into());
+        self
+    }
+
+    pub fn command(mut self, c: impl Into<String>) -> Self {
+        self.text.commands.push(c.into());
+        self
+    }
+
+    pub fn commands(mut self, cmds: &[&str]) -> Self {
+        self.text.commands = cmds.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn build(self) -> Text {
+        self.text
+    }
+}
+
+impl Text {
+    pub fn new(app: &snapshot::App) -> Self {
+        use Activity::*;
+        let phase = app.engine.phase.expect("phase must exist");
+        let day = app.engine.day;
+        let timer = app.current_timer;
+        let checks = app.engine.game.check.clone();
+        let actor = app.engine.actor;
+        let players = app.engine.game.players.as_slice();
+        let guesses = app.engine.game.guess.as_slice();
+        let voting = app
+            .engine
+            .game
+            .voting
+            .get(&day)
+            .unwrap_or(&snapshot::Voting::default())
+            .clone();
+        let tie_voting = app
+            .engine
+            .game
+            .tie_voting
+            .get(&day)
+            .unwrap_or(&snapshot::Voting::default())
+            .clone();
+        let final_votes = app
+            .engine
+            .game
+            .final_voting
+            .get(&day)
+            .unwrap_or(&Vec::new())
+            .clone();
+        let eliminations = app
+            .engine
+            .game
+            .eliminated
+            .get(&day)
+            .unwrap_or(&Vec::new())
+            .clone();
+
+        match phase {
+            Night(activity) => Self::night(activity, day, actor, players, timer, checks),
+            Morning(activity) => Self::morning(activity, actor, players, timer, guesses),
+            Noon(activity) => Self::noon(
+                activity,
+                actor,
+                players,
+                timer,
+                &voting.nominees,
+                &voting.nominations,
+            ),
+            Evening(activity) => Self::evening(
+                activity,
+                actor,
+                players,
+                timer,
+                voting,
+                tie_voting,
+                final_votes.as_slice(),
+                eliminations.as_slice(),
+            ),
+        }
+    }
+
+    fn night(
+        activity: NightActivity,
+        day: usize,
+        actor: Option<Position>,
+        players: &[Player],
+        timer: Option<u64>,
+        checks: HashMap<usize, Check>,
+    ) -> Self {
+        use NightActivity::*;
+        match activity {
+            RoleAssignment => Self::role_assignment(actor, players, timer),
+
+            SheriffReveal => {
+                Self::role_reveal("Sheriff Reveal", Role::Sheriff, actor, players, timer)
+            }
+
+            DonReveal => Self::role_reveal("Don Reveal", Role::Don, actor, players, timer),
+
+            MafiaBriefing => Self::mafia_briefing(actor, players, timer),
+
+            MafiaShooting => Self::mafia_shooting(actor, players, timer),
+
+            SheriffCheck => Self::check(day, Role::Sheriff, actor, players, timer, checks),
+
+            DonCheck => Self::check(day, Role::Don, actor, players, timer, checks),
+        }
+    }
+
+    fn morning(
+        activity: MorningActivity,
+        actor: Option<Position>,
+        players: &[Player],
+        timer: Option<u64>,
+        guesses: &[Position],
+    ) -> Self {
+        use MorningActivity::*;
+
+        match activity {
+            Guessing => Self::guessing(actor, players, timer, guesses),
+            DeathSpeech => Self::death_speech(actor, players, timer),
+        }
+    }
+    fn noon(
+        activity: NoonActivity,
+        actor: Option<Position>,
+        players: &[Player],
+        timer: Option<u64>,
+        nominees: &[Position],
+        nominations: &HashMap<Position, Position>,
+    ) -> Self {
+        use NoonActivity::*;
+
+        match activity {
+            Discussion => Self::discussion(actor, players, timer, nominees, nominations),
+        }
+    }
+    fn evening(
+        activity: EveningActivity,
+        actor: Option<Position>,
+        players: &[Player],
+        timer: Option<u64>,
+        voting: snapshot::Voting,
+        tie_voting: snapshot::Voting,
+        final_votes: &[Position],
+        eliminations: &[Position],
+    ) -> Self {
+        use EveningActivity::*;
+        let nominees = voting.nominees.as_slice();
+        let votes = &voting.votes;
+        let tie_nominees = tie_voting.nominees.as_slice();
+        let tie_votes = &tie_voting.votes;
+
+        match activity {
+            Voting => Self::voting(actor, players, timer, nominees, votes),
+            TieDiscussion => Self::tie_discussion(actor, players, timer, &tie_voting.nominees),
+            TieVoting => Self::tie_voting(actor, players, timer, tie_nominees, tie_votes),
+            FinalVoting => Self::final_voting(actor, timer, tie_nominees, final_votes),
+            FinalSpeech => Self::final_speech(actor, players, timer, eliminations),
+        }
+    }
+
+    fn role_assignment(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
         let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Role Assignment".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+        let mut builder =
+            TextBuilder::new("Role Assignment").subtitle(format!("Remaining: {remaining}"));
 
         match actor {
             None => {
-                text.description = Some(
-                    "Roles will be assigned to players one by one.\nRun `next` to select the player to assign a role".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                // No active actor yet – show initial description
+                builder = builder
+                    .description(
+                        "Assign roles to players one by one.\n\
+                     Run `next` to select the next unassigned player.\n\
+                     Use `assign` to give them a role.",
+                    )
+                    .commands(&["next", "warn"])
             }
             Some(position) => {
-                let player = &players
+                let active_player = players
                     .iter()
                     .find(|p| p.position.expect("Player should have position") == position)
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is waiting",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = player
-                    .role
-                    .map(|role| format!("Player has been assigned {role}"));
-                text.commands.push("next".to_string());
-                text.commands.push("assign".to_string());
-                text.commands.push("warn".to_string());
-                text
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is waiting.\n\
+                        Run `assign` to reveal their role.",
+                        active_player.name
+                    ))
+                    .commands(&["assign", "warn"])
+                    .timer(timer);
+
+                if let Some(role) = active_player.role {
+                    builder = builder
+                        .actor(format!(
+                            "Player {} at {position} received their role.",
+                            active_player.name
+                        ))
+                        .result(format!("Role assigned: {role}"))
+                        .commands(&["next", "warn"]);
+                }
             }
         }
+        builder.build()
     }
 
-    fn sheriff_reveal(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let mut text = Self::header("Sheriff Reveal".to_string(), Some(String::new()));
-
-        match actor {
-            None => {
-                text.description = Some(
-                    "Woke up the sheriff to make sure players got his role\n has 5s to look at the city\nRun `next` to select the sheriff and to start timer".to_string(),
-                );
-
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-            Some(position) => {
-                let player = &players
-                    .iter()
-                    .find(|p| p.role.expect("Player should have position") == Role::Sheriff)
-                    .expect("Player with given position should exist");
-
-                text.actor = Some(format!(
-                    "Player {} at position {position} is the Sheriff",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text
-            }
-        }
-    }
-
-    fn don_reveal(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let mut text = Self::header("Don Reveal".to_string(), Some(String::new()));
-
-        match actor {
-            None => {
-                text.description = Some(
-                    "Woke up the don to make sure player got his role\n has 5s to look at the city\nRun `next` to select the don and to start timer".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-            Some(position) => {
-                let player = &players
-                    .iter()
-                    .find(|p| p.role.expect("Player should have position") == Role::Don)
-                    .expect("Player with given position should exist");
-
-                text.actor = Some(format!(
-                    "Player {} at position {position} is the Don",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-        }
-    }
-
-    fn mafia_briefing(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let mafia = &players
-            .iter()
-            .filter(|p| {
-                p.role.expect("Player should have role at this point") == Role::Don
-                    || p.role.expect("Player should have role at this point") == Role::Mafia
-            })
-            .map(|p| {
-                p.position
-                    .expect("Player should have position at this point")
-                    .to_string()
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
-        let mut text = Self::header("Mafia Briefing".to_string(), Some(mafia.clone()));
-
-        match actor {
-            None => {
-                text.description = Some(
-                    "Woke up the don and 2 mafia players\n They have 60s to come up with strategy\nRun `next` to start timer".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-            Some(_) => {
-                text.actor = None;
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-        }
-    }
-
-    fn mafia_shooting(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let mafia = &players
-            .iter()
-            .filter(|p| {
-                p.role.expect("Player should have role at this point") == Role::Don
-                    || p.role.expect("Player should have role at this point") == Role::Mafia
-            })
-            .map(|p| {
-                p.position
-                    .expect("Player should have position at this point")
-                    .to_string()
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
-        let mut text = Self::header("Mafia Shooting".to_string(), Some(mafia.clone()));
-
-        match actor {
-            None => {
-                text.description = Some(
-                    "Name the players in order in case all mafia players shoot one target record it\n Run 'shoot n' to record or \nRun `next` to move forward and record miss".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("shoot".to_string());
-
-                text.commands.push("warn".to_string());
-
-                text
-            }
-            Some(_) => {
-                text.actor = None;
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("shoot".to_string());
-                text.commands.push("warn".to_string());
-
-                text
-            }
-        }
-    }
-
-    fn sheriff_check(
+    fn role_reveal(
+        title: &str,
+        role: Role,
         actor: Option<Position>,
         players: &[Player],
         timer: Option<u64>,
-        day: usize,
-        checks: HashMap<usize, Check>,
-    ) -> Self {
-        let subtitle = if day > 1 {
-            let mut prev_checks = Vec::new();
-            for d in 1..=day {
-                prev_checks.push(checks.get(&d))
-            }
-
-            prev_checks
-                .iter()
-                .map(|c| {
-                    if c.is_some() {
-                        c.unwrap()
-                            .sheriff
-                            .expect("position should exist")
-                            .value()
-                            .to_string()
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(", ")
-        } else {
-            String::new()
-        };
-        let mut text = Self::header("Sheriff Check".to_string(), Some(subtitle));
+    ) -> Text {
+        let mut builder = TextBuilder::new(title).subtitle("Confirming identity");
 
         match actor {
             None => {
-                text.description = Some(
-                    "Woke up the sheriff \n has 10ss to check one player\nRun `next` to select the sheriff and to start timer".to_string(),
-                );
-
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "Wake the {role} so they can confirm their role.\n\
+                     The {role} will have a few seconds to look around.\n\
+                     Run `next` to begin."
+                    ))
+                    .commands(&["next", "warn"]);
             }
             Some(position) => {
-                let sheriff = &players
+                let player = players
                     .iter()
-                    .find(|p| p.role.expect("Player should have position") == Role::Sheriff)
-                    .expect("Player with given position should exist");
+                    .find(|p| p.role == Some(role))
+                    .expect("Required role must exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is the Sheriff",
-                    sheriff.name.clone()
-                ));
-                text.timer = timer;
-                text.result = checks.get(&day).map(|check| {
-                    format!(
-                        "Sheriff performed check of player at position {}\n Found: {}",
-                        check.sheriff.expect("target position should exist"),
-                        players
-                            .iter()
-                            .find(|p| p.position == check.sheriff)
-                            .expect("Target player should exist")
-                            .role
-                            .expect("Player shoud have role")
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is the {role}.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "warn"]);
+            }
+        }
+
+        builder.build()
+    }
+
+    fn mafia_briefing(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
+        // Collect positions of Don and Mafia members
+        let mafia_positions = players
+            .iter()
+            .filter(|p| matches!(p.role, Some(Role::Don) | Some(Role::Mafia)))
+            .map(|p| p.position.expect("Player should have position").to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut builder = TextBuilder::new("Mafia Briefing")
+            .subtitle(format!("Members at positions: {mafia_positions}"));
+
+        match actor {
+            None => {
+                // No active actor yet – description for host
+                builder = builder
+                    .description(
+                        "Wake the Don and Mafia players.\n\
+                     They have 60s to discuss strategy.\n\
+                     Run `next` to start the timer.",
                     )
-                });
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text.commands.push("check".to_string());
-                text
+                    .commands(&["next", "warn"]);
+            }
+            Some(_) => {
+                // During the briefing – no individual actor
+                builder = builder
+                    .actor("Mafia members are briefing.".to_string())
+                    .timer(timer)
+                    .commands(&["next", "warn"]);
             }
         }
+
+        builder.build()
     }
 
-    fn don_check(
+    fn mafia_shooting(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
+        // Collect positions of Don and Mafia members
+        let mafia_positions = players
+            .iter()
+            .filter(|p| matches!(p.role, Some(Role::Don) | Some(Role::Mafia)))
+            .map(|p| p.position.expect("Player should have position").to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut builder = TextBuilder::new("Mafia Shooting")
+            .subtitle(format!("Mafia members at positions: {mafia_positions}"));
+
+        match actor {
+            None => {
+                // No active actor yet – instructions for host
+                builder = builder
+                    .description(
+                        "Mafia will choose a target.\n\
+                     If all shoot the same target, it's a kill.\n\
+                     If any miss, the shot fails.\n\
+                     Use `shoot n` to record a hit.\n\
+                     Running `next` without recording counts as a miss.",
+                    )
+                    .commands(&["next", "shoot", "warn"]);
+            }
+            Some(_) => {
+                // Active mafia shooting – no individual actor
+                builder = builder
+                    .actor("Mafia are executing their shot...".to_string())
+                    .timer(timer)
+                    .commands(&["next", "shoot", "warn"]);
+            }
+        }
+
+        builder.build()
+    }
+
+    fn check(
+        day: usize,
+        role: Role, // Sheriff or Don
         actor: Option<Position>,
         players: &[Player],
         timer: Option<u64>,
-        day: usize,
         checks: HashMap<usize, Check>,
-    ) -> Self {
-        let subtitle = if day > 1 {
-            let mut prev_checks = Vec::new();
-            for d in 1..=day {
-                prev_checks.push(checks.get(&d))
-            }
+    ) -> Text {
+        // Title based on role
+        let title = match role {
+            Role::Sheriff => "Sheriff Check",
+            Role::Don => "Don Check",
+            _ => panic!("Role must be Sheriff or Don for this function"),
+        };
 
-            prev_checks
-                .iter()
-                .map(|c| {
-                    if c.is_some() {
-                        c.unwrap()
-                            .sheriff
-                            .expect("position should exist")
-                            .value()
-                            .to_string()
-                    } else {
-                        String::new()
-                    }
+        // Subtitle: summarize previous checks
+        let subtitle = if day > 1 {
+            (1..=day)
+                .filter_map(|d| checks.get(&d))
+                .map(|check| match role {
+                    Role::Sheriff => check
+                        .sheriff
+                        .map_or(String::new(), |pos| pos.value().to_string()),
+                    Role::Don => check
+                        .don
+                        .map_or(String::new(), |pos| pos.value().to_string()),
+                    _ => unreachable!(),
                 })
-                .collect::<Vec<String>>()
+                .collect::<Vec<_>>()
                 .join(", ")
         } else {
             String::new()
         };
-        let mut text = Self::header("Don Check".to_string(), Some(subtitle));
+
+        let mut builder = TextBuilder::new(title).subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(
-                    "Woke up the don \n has 10ss to check one player\nRun `next` to select the don and to start timer".to_string(),
-                );
-
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                // No active actor yet – show instructions
+                builder = builder
+                    .description(format!(
+                        "Wake the {role} to check a player.\n\
+                     They have 10 seconds to act.\n\
+                     Run `next` to select the {role}",
+                    ))
+                    .commands(&["next", "warn"]);
             }
             Some(position) => {
-                let don = &players
+                // Find the active player
+                let active_player = players
                     .iter()
-                    .find(|p| p.role.expect("Player should have position") == Role::Don)
-                    .expect("Player with given position should exist");
+                    .find(|p| p.role == Some(role))
+                    .expect("{role} must exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is the Don",
-                    don.name.clone()
-                ));
-                text.timer = timer;
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is the {}.",
+                        active_player.name, role
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "warn", "check"]);
 
-                text.result = checks.get(&day).map(|check| match check.don {
-                    Some(position) => {
-                        format!(
-                            "Don performed check of player at position {}\n Found:  {}",
-                            position,
-                            players
-                                .iter()
-                                .find(|p| p.position == check.don)
-                                .expect("Target player should exist")
-                                .role
-                                .expect("Player shoud have role")
-                        )
+                // Add result if check exists
+                if let Some(check) = checks.get(&day) {
+                    let target_pos = match role {
+                        Role::Sheriff => check.sheriff,
+                        Role::Don => check.don,
+                        _ => None,
+                    };
+
+                    if let Some(target_pos) = target_pos {
+                        let target_player = players
+                            .iter()
+                            .find(|p| p.position == Some(target_pos))
+                            .expect("Target player must exist");
+
+                        builder = builder.result(format!(
+                            "{} checked player at position {}.\nFound role: {}",
+                            role,
+                            target_pos,
+                            target_player.role.expect("Player must have role")
+                        ));
                     }
-                    None => "".to_string(),
-                });
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text.commands.push("check".to_string());
-                text
+                }
             }
         }
+
+        builder.build()
     }
 
-    fn guesing(
+    fn guessing(
         actor: Option<Position>,
         players: &[Player],
         timer: Option<u64>,
-        guesses: Vec<Position>,
-    ) -> Self {
-        let mut text = Self::header(
-            "Mafia guessing".to_string(),
-            Some("Just to fix".to_string()),
-        );
+        guesses: &[Position],
+    ) -> Text {
+        let mut builder = TextBuilder::new("Mafia Guessing").subtitle("Last suspicion");
 
         match actor {
             None => {
-                text.description = Some(
-                    "Woke up killed player \n has 10s to name 3 players as mafia\nRun `next` to select the player and to start timer".to_string(),
-                );
-
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(
+                        "Wake the killed player.\n\
+                     They have 10s to name up to 3 mafia suspects.\n\
+                     Run `next` to start the timer.\n\
+                     If no guesses are recorded, it counts as none.",
+                    )
+                    .commands(&["next", "warn"]);
             }
+
             Some(position) => {
-                let dead_p = &players
+                let dead_player = players
                     .iter()
                     .find(|p| p.status == Status::Dead)
-                    .expect("Player with given position should exist");
+                    .expect("Dead player must exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} was been killed",
-                    dead_p.name.clone()
-                ));
-                text.timer = timer;
-
-                if guesses.is_empty() {
-                    text.result = None;
+                let result = if guesses.is_empty() {
+                    "No mafia guesses were recorded.".to_string()
                 } else {
-                    text.result = Some(format!(
-                        "{} {} {} players have been recorded as guesses",
-                        guesses[0], guesses[1], guesses[2]
-                    ));
-                }
+                    format!(
+                        "Guessed mafia positions: {}",
+                        guesses
+                            .iter()
+                            .map(|p| p.value().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
 
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text.commands.push("check".to_string());
-                text
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} was killed",
+                        dead_player.name
+                    ))
+                    .timer(timer)
+                    .result(result)
+                    .commands(&["next", "warn", "guess"]);
             }
         }
+
+        builder.build()
     }
 
-    fn death_speech(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let mut text = Self::header(
-            "Final Speech".to_string(),
-            Some("Final thoughts of killed player".to_string()),
-        );
+    fn death_speech(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
+        let mut builder = TextBuilder::new("Final Speech").subtitle("Last words");
 
         match actor {
             None => {
-                text.description = Some(
-                    "Final speech, player has 60s to talk\nRun `next` to select the player and to start timer".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(
+                        "The killed player is allowed a final speech.\n\
+                     They have 60s to share their last thoughts.\n\
+                     Run `next` to select the player and start the timer.",
+                    )
+                    .commands(&["next", "warn"]);
             }
+
             Some(position) => {
-                let player = &players
+                let player = players
                     .iter()
-                    .find(|p| p.position.expect("Player should have position") == position)
+                    .find(|p| p.position == Some(position))
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is giving a final speach",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is giving their final speech.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "warn"]);
             }
         }
+
+        builder.build()
     }
 
     fn discussion(
         actor: Option<Position>,
         players: &[Player],
         timer: Option<u64>,
+        nominees: &[Position],
         nominations: &HashMap<Position, Position>,
-    ) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Discussion".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    ) -> Text {
+        // Collect nominated players (values of the map)
+        let nominated = nominees
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if nominated.is_empty() {
+            "No nominations yet".to_string()
+        } else {
+            format!("Nominees: {nominated}")
+        };
+
+        let mut builder = TextBuilder::new("Discussion").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(
-                    "Players would be given 60s to talk\nRun `next` to select the player and to start timer".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(
+                        "Players may speak one by one.\n\
+                     Each player has 60s to talk.\n\
+                     Run `next` to select the next speaker.",
+                    )
+                    .commands(&["next", "warn"]);
             }
+
             Some(position) => {
-                let player = &players
+                let player = players
                     .iter()
-                    .find(|p| p.position.expect("Player should have position") == position)
+                    .find(|p| p.position == Some(position))
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is speaking",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = nominations
-                    .get(&position)
-                    .map(|pos| format!("Player  has nominated {pos}"));
-                text.commands.push("next".to_string());
-                text.commands.push("nominate".to_string());
-                text.commands.push("warn".to_string());
-                text
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is speaking.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "nominate", "warn"]);
+
+                if let Some(nominated) = nominations.get(&position) {
+                    builder = builder.result(format!("Nominated player at position {nominated}"));
+                }
             }
         }
+
+        builder.build()
     }
 
     fn voting(
@@ -614,92 +683,111 @@ impl Text {
         timer: Option<u64>,
         nominees: &[Position],
         votes: &HashMap<Position, Vec<Position>>,
-    ) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Voting".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    ) -> Text {
+        let nominees_list = nominees
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if nominees.is_empty() {
+            "No nominees".to_string()
+        } else {
+            format!("Nominees: {nominees_list}")
+        };
+
+        let mut builder = TextBuilder::new("Voting").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(format!(
-                    "Players {} have been nominated\nRun `next` to select the nominee \nand record votes by issuing vote <positions> command",
-                    nominees
-                        .iter()
-                        .map(|p| p.value().to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ));
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "The following players are nominated:\n{nominees_list}\n\
+                     Votes are cast nominee by nominee.\n\
+                     Use `vote <positions>` to record votes.\n\
+                     Run `next` to move to the next nominee.",
+                    ))
+                    .commands(&["next", "vote", "warn"]);
             }
+
             Some(position) => {
-                let player = &players
+                let player = players
                     .iter()
-                    .find(|p| p.position.expect("Player should have position") == position)
+                    .find(|p| p.position == Some(position))
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Cast votes for Player {} at position {position}",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = votes.get(&position).map(|votes| {
-                    format!(
-                        "Players {}  has voted",
-                        votes
+                builder = builder
+                    .actor(format!(
+                        "Voting for Player {} at position {position}.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "vote", "warn"]);
+
+                if let Some(voters) = votes.get(&position) {
+                    builder = builder.result(format!(
+                        "Votes from: {}",
+                        voters
                             .iter()
                             .map(|p| p.value().to_string())
-                            .collect::<Vec<String>>()
+                            .collect::<Vec<_>>()
                             .join(", ")
-                    )
-                });
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-                text
+                    ));
+                }
             }
         }
+
+        builder.build()
     }
 
-    fn tie_discussion(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Tie Discussion".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    fn tie_discussion(
+        actor: Option<Position>,
+        players: &[Player],
+        timer: Option<u64>,
+        tied: &[Position],
+    ) -> Text {
+        let tied_list = tied
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if tied.is_empty() {
+            "No tied nominees".to_string()
+        } else {
+            format!("Tied: {tied_list}")
+        };
+
+        let mut builder = TextBuilder::new("Tie Discussion").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(
-                    "Players would be given 30s to talk\nRun `next` to select the player and to start timer".to_string(),
-                );
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "The vote resulted in a tie between:\n{tied_list}\n\
+                     Each tied player gets 30s to speak.\n\
+                     Run `next` to begin.",
+                    ))
+                    .commands(&["next", "warn"]);
             }
+
             Some(position) => {
-                let player = &players
+                let player = players
                     .iter()
-                    .find(|p| p.position.expect("Player should have position") == position)
+                    .find(|p| p.position == Some(position))
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Player {} at position {position} is speaking",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is speaking.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "warn"]);
             }
         }
+
+        builder.build()
     }
 
     fn tie_voting(
@@ -708,109 +796,114 @@ impl Text {
         timer: Option<u64>,
         nominees: &[Position],
         votes: &HashMap<Position, Vec<Position>>,
-    ) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Tie Voting".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    ) -> Text {
+        let nominees_list = nominees
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if nominees.is_empty() {
+            "No tied nominees".to_string()
+        } else {
+            format!("Tied nominees: {nominees_list}")
+        };
+
+        let mut builder = TextBuilder::new("Tie Voting").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(format!(
-                    "Players {} have been nominated\nRun `next` to select the nominee \nand record votes by issuing vote <positions> command",
-                    nominees
-                        .iter()
-                        .map(|p| p.value().to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ));
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "The following players are tied:\n{nominees_list}\n\
+                     Votes are cast nominee by nominee.\n\
+                     Use `vote <positions>` to record votes.\n\
+                     Run `next` to move to the next nominee.",
+                    ))
+                    .commands(&["next", "vote", "warn"]);
             }
+
             Some(position) => {
-                let player = &players
+                let player = players
                     .iter()
-                    .find(|p| p.position.expect("Player should have position") == position)
+                    .find(|p| p.position == Some(position))
                     .expect("Player with given position should exist");
 
-                text.actor = Some(format!(
-                    "Cast votes for Player {} at position {position}",
-                    player.name.clone()
-                ));
-                text.timer = timer;
-                text.result = votes.get(&position).map(|votes| {
-                    format!(
-                        "Players {}  has voted",
-                        votes
+                builder = builder
+                    .actor(format!(
+                        "Voting for Player {} at position {position}.",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "vote", "warn"]);
+
+                if let Some(voters) = votes.get(&position) {
+                    builder = builder.result(format!(
+                        "Votes from: {}",
+                        voters
                             .iter()
                             .map(|p| p.value().to_string())
-                            .collect::<Vec<String>>()
+                            .collect::<Vec<_>>()
                             .join(", ")
-                    )
-                });
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-                text
+                    ));
+                }
             }
         }
+
+        builder.build()
     }
 
     fn final_voting(
         actor: Option<Position>,
-        players: &[Player],
         timer: Option<u64>,
         nominees: &[Position],
         final_votes: &[Position],
-    ) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Final Voting".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    ) -> Text {
+        // Prepare subtitle with tied nominees
+        let nominees_list = nominees
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if nominees.is_empty() {
+            "No tied nominees".to_string()
+        } else {
+            format!("Tied nominees: {nominees_list}")
+        };
+
+        let mut builder = TextBuilder::new("Final Voting").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(format!(
-                    "Players {} have been in tie voting\nRun vote <positions> \n and list positions who voted yes and 0 if none",
-                    nominees
-                        .iter()
-                        .map(|p| p.value().to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ));
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "The following players were in tie voting:\n{nominees_list}\n\
+                     Record final votes using `vote <positions>` (use 0 if none).\n\
+                     Run `next` to move forward without recording votes."
+                    ))
+                    .commands(&["next", "vote", "warn"]);
             }
             Some(_) => {
-                text.actor = Some("Cast votes ".to_string());
-                text.timer = timer;
-                text.result = if final_votes.is_empty() {
-                    None
-                } else {
-                    Some(format!(
-                        "Players {}  has voted",
+                builder = builder
+                    .actor("Cast final votes.".to_string())
+                    .timer(timer)
+                    .commands(&["next", "vote", "warn"]);
+
+                if !final_votes.is_empty() {
+                    builder = builder.result(format!(
+                        "Players voted: {}",
                         final_votes
                             .iter()
                             .map(|p| p.value().to_string())
-                            .collect::<Vec<String>>()
-                            .join(", "),
-                    ))
-                };
-
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-                text
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
             }
         }
+
+        builder.build()
     }
 
     fn final_speech(
@@ -818,89 +911,47 @@ impl Text {
         players: &[Player],
         timer: Option<u64>,
         eliminations: &[Position],
-    ) -> Self {
-        let remaining = players.iter().filter(|p| p.role.is_none()).count();
-        let mut text = Self::header(
-            "Final Speech".to_string(),
-            Some(format!("Remaining: {remaining}")),
-        );
+    ) -> Text {
+        // Prepare subtitle with eliminated players
+        let eliminated_list = eliminations
+            .iter()
+            .map(|p| p.value().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let subtitle = if eliminations.is_empty() {
+            "No eliminated players".to_string()
+        } else {
+            format!("Eliminated: {eliminated_list}")
+        };
+
+        let mut builder = TextBuilder::new("Final Speech").subtitle(subtitle);
 
         match actor {
             None => {
-                text.description = Some(format!(
-                    "Players {} have been eliminated\nRun next to choose eliminated player and to start timer",
-                    eliminations
-                        .iter()
-                        .map(|p| p.value().to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ));
-                text.commands.push("next".to_string());
-                text.commands.push("vote".to_string());
-                text.commands.push("warn".to_string());
-
-                text
+                builder = builder
+                    .description(format!(
+                        "The following players have been eliminated:\n{eliminated_list}\n\
+                     Run `next` to select an eliminated player and start their final speech."
+                    ))
+                    .commands(&["next", "warn"]);
             }
-            Some(_) => {
-                text.actor = Some("Cast votes ".to_string());
-                text.timer = timer;
-                text.result = None;
-                text.commands.push("next".to_string());
-                text.commands.push("warn".to_string());
-                text
+            Some(position) => {
+                let player = players
+                    .iter()
+                    .find(|p| p.position == Some(position))
+                    .expect("Player with given position must exist");
+
+                builder = builder
+                    .actor(format!(
+                        "Player {} at position {position} is giving their final speech",
+                        player.name
+                    ))
+                    .timer(timer)
+                    .commands(&["next", "warn"]);
             }
         }
-    }
 
-    pub fn new(
-        pahse: Activity,
-        actor: Option<Position>,
-        players: &[Player],
-        timer: Option<u64>,
-        day: usize,
-        checks: HashMap<usize, Check>,
-        guesses: Vec<Position>,
-        nominations: &HashMap<Position, Position>,
-        nominees: &[Position],
-        tie_nominees: &[Position],
-        votes: &HashMap<Position, Vec<Position>>,
-        tie_votes: &HashMap<Position, Vec<Position>>,
-        final_votes: &[Position],
-        eliminations: &[Position],
-    ) -> Self {
-        use Activity::*;
-        use EveningActivity::*;
-        use MorningActivity::*;
-        use NightActivity::*;
-        use NoonActivity::*;
-        match pahse {
-            Night(activity) => match activity {
-                RoleAssignment => Self::role_assignment(actor, players, timer),
-                SheriffReveal => Self::sheriff_reveal(actor, players, timer),
-                DonReveal => Self::don_reveal(actor, players, timer),
-                MafiaBriefing => Self::mafia_briefing(actor, players, timer),
-                MafiaShooting => Self::mafia_shooting(actor, players, timer),
-                SheriffCheck => Self::sheriff_check(actor, players, timer, day, checks),
-                DonCheck => Self::don_check(actor, players, timer, day, checks),
-            },
-
-            Morning(activity) => match activity {
-                Guessing => Self::guesing(actor, players, timer, guesses),
-                DeathSpeech => Self::death_speech(actor, players, timer),
-            },
-
-            Noon(activity) => match activity {
-                Discussion => Self::discussion(actor, players, timer, nominations),
-            },
-
-            Evening(activity) => match activity {
-                NominationAnnouncement => Self::role_assignment(actor, players, timer),
-                Voting => Self::voting(actor, players, timer, nominees, votes),
-                TieDiscussion => Self::tie_discussion(actor, players, timer),
-                TieVoting => Self::tie_voting(actor, players, timer, tie_nominees, tie_votes),
-                FinalVoting => Self::final_voting(actor, players, timer, tie_nominees, final_votes),
-                FinalSpeech => Self::final_speech(actor, players, timer, eliminations),
-            },
-        }
+        builder.build()
     }
 }

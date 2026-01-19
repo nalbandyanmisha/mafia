@@ -671,8 +671,13 @@ impl Engine {
                     // First speaker just to pass correct datatype, does not matter value here.
                     // will fix this to avoid missunderstanding
 
-                    self.actor.reset(self.first_speaker_of_day());
-                    self.set_phase(next)?;
+                    let nominees = self
+                        .game
+                        .voting()
+                        .get(&self.day)
+                        .expect("Voting must exist")
+                        .get_nominees();
+                    self.actor.reset(nominees[0]);
                     self.set_phase(next)?;
                     vec![Event::PhaseAdvanced {
                         from: current,
@@ -684,20 +689,6 @@ impl Engine {
             }
 
             // -------- Evening --------
-            Evening(NominationAnnouncement) => {
-                let nominees = self
-                    .game
-                    .voting()
-                    .get(&self.day)
-                    .expect("Voting must exist")
-                    .get_nominees();
-                self.actor.reset(nominees[0]);
-                self.set_phase(next)?;
-                vec![Event::PhaseAdvanced {
-                    from: current,
-                    to: next,
-                }]
-            }
             Evening(Voting) => {
                 let voting = self
                     .game
@@ -899,7 +890,7 @@ impl Engine {
                     if self.day.is_first() && voting.nominee_count() == 1 {
                         Night(MafiaShooting)
                     } else {
-                        Evening(NominationAnnouncement)
+                        Evening(Voting)
                     }
                 } else {
                     Night(MafiaShooting)
@@ -907,7 +898,6 @@ impl Engine {
             }
 
             // -------- Evening --------
-            Evening(NominationAnnouncement) => Evening(Voting),
             Evening(Voting) => {
                 let voting = self
                     .game
