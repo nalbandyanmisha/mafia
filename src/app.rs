@@ -254,7 +254,7 @@ impl App {
 
                 match self
                     .engine
-                    .apply(EngineCommand::Vote { targets: positions })
+                    .apply(EngineCommand::Guess { targets: positions })
                 {
                     Ok(events) => {
                         for event in events {

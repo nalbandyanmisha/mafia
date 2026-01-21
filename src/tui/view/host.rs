@@ -610,7 +610,7 @@ impl Text {
 
                 builder = builder
                     .actor(format!(
-                        "Player {} at position {position} is giving their final speech.",
+                        "Player {} at position {position} is giving final speech.",
                         player.name
                     ))
                     .timer(timer)

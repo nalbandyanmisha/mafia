@@ -700,6 +700,12 @@ impl Engine {
 
                 if self.actor.is_completed() {
                     let winners = voting.winners();
+                    let tie_nominees = voting
+                        .get_nominees()
+                        .iter()
+                        .copied()
+                        .filter(|p| winners.iter().any(|w| p == w))
+                        .collect::<Vec<Position>>();
 
                     if winners.len() == 1 {
                         self.game.record_eliminated(self.day, &winners)?;
@@ -712,7 +718,7 @@ impl Engine {
                     } else {
                         self.game
                             .tie_voting_mut()
-                            .insert(self.day, game::voting::Voting::from_nominees(&winners));
+                            .insert(self.day, game::voting::Voting::from_nominees(&tie_nominees));
                         let tie_nominees = self
                             .game
                             .tie_voting()

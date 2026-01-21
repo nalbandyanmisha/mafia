@@ -19,9 +19,9 @@ impl Actor {
 
         let lines = Layout::vertical([
             Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(1),
             Constraint::Length(2),
-            Constraint::Length(1),
-            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
