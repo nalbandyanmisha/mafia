@@ -24,6 +24,7 @@ use rand::prelude::*;
 pub struct Engine {
     pub game: Game,
     pub actor: Actor,
+    pub last_discussion_started: Position,
     pub day: DayIndex,
     pub state: EngineState,
 }
@@ -97,6 +98,7 @@ impl Engine {
         Engine {
             game: Game::new(),
             actor: Actor::new(Position::new(1)),
+            last_discussion_started: Position::new(0),
             day: DayIndex::new(0),
             state: EngineState::Lobby(LobbyStatus::Waiting),
         }
@@ -212,7 +214,7 @@ impl Engine {
             .players_mut()
             .sort_by_key(|p| p.position().map(|pos| pos.value()));
         self.state = EngineState::Game(Activity::Night(NightActivity::RoleAssignment));
-        self.actor.reset(self.first_speaker_of_day());
+        self.actor.reset(Position::new(1));
 
         Ok(vec![Event::GameStarted])
     }
@@ -484,7 +486,7 @@ impl Engine {
                     // Todo
                     // First speaker just to pass correct datatype, does not matter value here.
                     // will fix this to avoid missunderstanding
-                    self.actor.reset(self.first_speaker_of_day());
+                    self.actor.reset(Position::new(1));
                     self.set_phase(next)?;
                     vec![Event::PhaseAdvanced {
                         from: current,
@@ -500,7 +502,9 @@ impl Engine {
                 }
             }
             Night(MafiaBriefing) => {
-                self.actor.reset(self.first_speaker_of_day());
+                let first_speaker_of_discussion = self.compute_first_speaker_of_day();
+                self.actor.reset(first_speaker_of_discussion);
+                self.last_discussion_started = first_speaker_of_discussion;
                 self.set_phase(next)?;
                 vec![Event::PhaseAdvanced {
                     from: current,
@@ -562,8 +566,10 @@ impl Engine {
 
                 if self.actor.is_completed() {
                     if next == Noon(Discussion) {
-                        self.actor.reset(self.first_speaker_of_day());
                         self.set_phase(next)?;
+                        let first_speaker_of_discussion = self.compute_first_speaker_of_day();
+                        self.actor.reset(first_speaker_of_discussion);
+                        self.last_discussion_started = first_speaker_of_discussion;
                         vec![Event::PhaseAdvanced {
                             from: current,
                             to: next,
@@ -638,8 +644,11 @@ impl Engine {
                 });
 
                 if self.actor.is_completed() {
-                    self.actor.reset(self.first_speaker_of_day());
                     self.set_phase(next)?;
+
+                    let first_speaker_of_discussion = self.compute_first_speaker_of_day();
+                    self.actor.reset(first_speaker_of_discussion);
+                    self.last_discussion_started = first_speaker_of_discussion;
                     vec![Event::PhaseAdvanced {
                         from: current,
                         to: next,
@@ -671,13 +680,17 @@ impl Engine {
                     // First speaker just to pass correct datatype, does not matter value here.
                     // will fix this to avoid missunderstanding
 
-                    let nominees = self
-                        .game
-                        .voting()
-                        .get(&self.day)
-                        .expect("Voting must exist")
-                        .get_nominees();
-                    self.actor.reset(nominees[0]);
+                    let mut first_actor_of_next_phase = Position::new(0);
+                    if next == Evening(Voting) {
+                        let nominees = self
+                            .game
+                            .voting()
+                            .get(&self.day)
+                            .expect("Voting must exist")
+                            .get_nominees();
+                        first_actor_of_next_phase = nominees[0];
+                    }
+                    self.actor.reset(first_actor_of_next_phase);
                     self.set_phase(next)?;
                     vec![Event::PhaseAdvanced {
                         from: current,
@@ -814,7 +827,7 @@ impl Engine {
                     }
                     self.actor.reset(nominees[0]);
                 } else {
-                    self.actor.reset(self.first_speaker_of_day());
+                    self.actor.reset(Position::new(1));
                     self.day.advance();
                 }
 
@@ -947,24 +960,28 @@ impl Engine {
         }
     }
 
-    fn first_speaker_of_day(&self) -> Position {
-        let start: Position = ((self.day.0 % Game::PLAYER_COUNT as usize) as u8 + 1).into();
-
-        // walk table circularly, starting from anchor
-        for offset in 0..Game::PLAYER_COUNT {
-            let pos: Position = (((start.value() - 1 + offset) % Game::PLAYER_COUNT) + 1).into();
-
-            if self
-                .game
-                .player_by_position(pos)
-                .map(|p| p.is_alive())
-                .unwrap_or(false)
-            {
-                return pos;
-            }
+    fn compute_first_speaker_of_day(&self) -> Position {
+        // If this is the very first discussion
+        if self.last_discussion_started == Position::new(0) {
+            return Position::new(1);
         }
 
-        panic!("At least one alive player must exist");
+        let mut current = self.last_discussion_started;
+
+        loop {
+            // advance once
+            current = if current.value() == Game::PLAYER_COUNT {
+                Position::new(1)
+            } else {
+                Position::new(current.value() + 1)
+            };
+
+            if let Some(player) = self.game.player_by_position(current) {
+                if player.is_alive() {
+                    return current;
+                }
+            }
+        }
     }
 
     fn phase(&self) -> Result<Activity> {
