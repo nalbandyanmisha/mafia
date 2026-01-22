@@ -3,7 +3,7 @@ pub mod commands;
 pub mod game;
 pub mod turn;
 
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use actor::Actor;
 use serde::Serialize;
@@ -708,6 +708,12 @@ impl Engine {
                     .voting()
                     .get(&self.day)
                     .expect("Voting must exist");
+                let voters = self
+                    .game
+                    .players()
+                    .iter()
+                    .filter_map(|p| if p.is_alive() { p.position() } else { None })
+                    .collect::<HashSet<Position>>();
 
                 voting.next_actor(&mut self.actor, |_| true);
 
@@ -729,9 +735,10 @@ impl Engine {
                         self.actor.reset(winners[0]);
                         self.set_phase(next)?;
                     } else {
-                        self.game
-                            .tie_voting_mut()
-                            .insert(self.day, game::voting::Voting::from_nominees(&tie_nominees));
+                        self.game.tie_voting_mut().insert(
+                            self.day,
+                            game::voting::Voting::from_nominees(&tie_nominees, voters),
+                        );
                         let tie_nominees = self
                             .game
                             .tie_voting()
@@ -902,7 +909,13 @@ impl Engine {
 
             // -------- Day --------
             Noon(Discussion) => {
-                let voting = game::voting::Voting::new();
+                let voters = self
+                    .game
+                    .players()
+                    .iter()
+                    .filter_map(|p| if p.is_alive() { p.position() } else { None })
+                    .collect::<HashSet<Position>>();
+                let voting = game::voting::Voting::new(voters);
                 let voting = self.game.voting().get(&self.day).unwrap_or(&voting);
 
                 if voting.has_nominees() {
