@@ -12,10 +12,14 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Voting {
-    nominations: HashMap<Position, Position>, // nominator -> nominee
-    nominees: Vec<Position>,                  // ordered
-    voters: HashSet<Position>,
+    nominees: Vec<Position>,               // nomination order
+    remaining_nominees: HashSet<Position>, // nominees yet to receive votes
+
+    voters: HashSet<Position>,           // eligible order
+    remaining_voters: HashSet<Position>, // voters yet to cast vote
+
     votes: HashMap<Position, Vec<Position>>, // nominee -> voters
+    nominations: HashMap<Position, Position>, // nominator -> nominee
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -28,6 +32,9 @@ pub enum Event {
         voter: Position,
         nominee: Position,
     },
+    Skipped {
+        nominee: Position,
+    }, // 0 vote registered
 }
 
 impl fmt::Display for Event {
@@ -39,6 +46,12 @@ impl fmt::Display for Event {
             Event::Voted { voter, nominee } => {
                 write!(f, "Player at position {voter} has voted for {nominee}")
             }
+            Event::Skipped { nominee } => {
+                write!(
+                    f,
+                    "Nominee at position {nominee} received no votes and was skipped"
+                )
+            }
         }
     }
 }
@@ -48,8 +61,8 @@ pub enum Error {
     #[error("Nominator {0:?} has already made a nomination")]
     AlreadyNominated(Position),
 
-    #[error("Voter {0:?} has already voted for {1:?}")]
-    AlreadyVoted(Position, Position),
+    #[error("Voter {0:?} has already voted")]
+    AlreadyVoted(Position),
 
     #[error("Nominee {0:?} is not in the nominee list")]
     InvalidNominee(Position),
@@ -137,19 +150,24 @@ impl Turn for Voting {
 impl Voting {
     pub fn new(voters: HashSet<Position>) -> Self {
         Voting {
-            nominations: HashMap::new(),
             nominees: Vec::new(),
-            voters,
+            remaining_nominees: HashSet::new(),
+            voters: voters.clone(),
+            remaining_voters: voters,
             votes: HashMap::new(),
+            nominations: HashMap::new(),
         }
     }
 
     pub fn from_nominees(nominees: &[Position], voters: HashSet<Position>) -> Self {
+        let remaining_nominees: HashSet<_> = nominees.iter().copied().collect();
         Self {
-            nominations: HashMap::new(),
             nominees: nominees.to_vec(),
-            voters,
+            remaining_nominees,
+            voters: voters.clone(),
+            remaining_voters: voters,
             votes: HashMap::new(),
+            nominations: HashMap::new(),
         }
     }
 
@@ -166,7 +184,7 @@ impl Voting {
     }
 
     pub fn is_eligible(&self, pos: Position) -> bool {
-        self.voters.contains(&pos)
+        self.remaining_voters.contains(&pos)
     }
 
     pub fn nominate(
@@ -185,18 +203,19 @@ impl Voting {
         self.nominations.insert(nominator, nominee);
         if !self.nominees.contains(&nominee) {
             self.nominees.push(nominee);
+            self.remaining_nominees.insert(nominee);
         }
 
         Ok(vec![Event::Nominated { nominator, nominee }])
     }
 
     pub fn vote(&mut self, voter: Position, nominee: Position) -> Result<Vec<Event>, Error> {
-        if self.votes.values().any(|voters| voters.contains(&voter)) {
-            return Err(Error::AlreadyVoted(voter, nominee));
+        if !self.voters.contains(&voter) {
+            return Err(Error::InvalidVoter(voter));
         }
 
-        if !self.voters.contains(&voter) {
-            return Err(Error::InvalidVoter(voter)); // or NotEligible
+        if self.voters.contains(&voter) && !self.remaining_voters.contains(&voter) {
+            return Err(Error::AlreadyVoted(voter));
         }
 
         if !self.nominees.contains(&nominee) {
@@ -206,7 +225,7 @@ impl Voting {
         self.votes.entry(nominee).or_default().push(voter);
 
         // mark voter as used
-        self.voters.remove(&voter);
+        self.remaining_voters.remove(&voter);
 
         Ok(vec![Event::Voted { voter, nominee }])
     }
@@ -228,21 +247,24 @@ impl Voting {
             // Skip duplicate in batch
             if !seen_in_batch.insert(voter) {
                 if strict {
-                    return Err(Error::AlreadyVoted(voter, nominee));
+                    return Err(Error::AlreadyVoted(voter));
                 } else {
                     continue;
                 }
             }
 
             // Check eligibility
-            if !self.is_eligible(voter) {
+            if !self.voters.contains(&voter) {
                 if strict {
-                    // Determine correct error
-                    return if self.votes.values().any(|v| v.contains(&voter)) {
-                        Err(Error::AlreadyVoted(voter, nominee))
-                    } else {
-                        Err(Error::InvalidVoter(voter))
-                    };
+                    return Err(Error::InvalidVoter(voter));
+                } else {
+                    continue;
+                }
+            }
+
+            if !self.remaining_voters.contains(&voter) {
+                if strict {
+                    return Err(Error::AlreadyVoted(voter));
                 } else {
                     continue;
                 }
@@ -301,6 +323,7 @@ mod tests {
         let event = voting.nominate(nominator, nominee).unwrap();
 
         assert!(voting.nominees.contains(&nominee));
+        assert!(voting.remaining_nominees.contains(&nominee));
         assert_eq!(voting.nominees, vec![nominee]);
         assert_eq!(event, vec![Event::Nominated { nominator, nominee }]);
     }
@@ -317,6 +340,7 @@ mod tests {
         voting.nominate(nominator_a, nominee).unwrap();
         voting.nominate(nominator_b, nominee).unwrap();
 
+        assert!(voting.remaining_nominees.contains(&nominee));
         assert_eq!(voting.nominees, vec![nominee]);
     }
 
@@ -358,6 +382,7 @@ mod tests {
 
         let votes = voting.votes.get(&nominee).unwrap();
         assert_eq!(votes, &vec![voter]);
+        assert!(!voting.remaining_voters.contains(&voter));
     }
 
     #[test]
@@ -370,7 +395,7 @@ mod tests {
 
         voting.vote(voter, nominee).unwrap();
         let err = voting.vote(voter, nominee).unwrap_err();
-        assert!(matches!(err, Error::AlreadyVoted(_, _)));
+        assert!(matches!(err, Error::AlreadyVoted(position) if position == voter));
     }
 
     #[test]
@@ -384,7 +409,7 @@ mod tests {
 
         voting.vote(voter, nominee_a).unwrap();
         let err = voting.vote(voter, nominee_b).unwrap_err();
-        assert!(matches!(err, Error::AlreadyVoted(_, _)));
+        assert!(matches!(err, Error::AlreadyVoted(position) if position == voter));
     }
 
     #[test]
@@ -396,7 +421,7 @@ mod tests {
         let mut voting = Voting::from_nominees(&[nominee], voters);
 
         let err = voting.vote(voter, nominee).unwrap_err();
-        assert!(matches!(err, Error::InvalidVoter(_)));
+        assert!(matches!(err, Error::InvalidVoter(position) if position == voter));
     }
 
     #[test]
@@ -409,7 +434,7 @@ mod tests {
         let mut voting = Voting::from_nominees(&[nominee], voters);
 
         let err = voting.vote(voter, non_nominee).unwrap_err();
-        assert!(matches!(err, Error::InvalidNominee(_)));
+        assert!(matches!(err, Error::InvalidNominee(position) if position == non_nominee));
     }
 
     #[test]
@@ -450,7 +475,7 @@ mod tests {
         let mut voting = Voting::new(voters);
 
         let err = voting.vote(voter, nominee).unwrap_err();
-        assert!(matches!(err, Error::InvalidNominee(_)));
+        assert!(matches!(err, Error::InvalidNominee(position) if position == nominee));
     }
 
     #[test]
@@ -651,7 +676,7 @@ mod tests {
 
     #[test]
     fn batch_vote_strict_mode_fails_on_first_ineligible() {
-        let voters = (1..=3).map(Position::new).collect::<HashSet<_>>();
+        let voters = create_voters(10);
         let nominee = pos(10);
         let mut voting = Voting::from_nominees(&[nominee], voters.clone());
 
@@ -662,7 +687,7 @@ mod tests {
         let batch_voters = vec![pos(1), pos(2), pos(3)];
 
         let err = voting.batch_vote(nominee, &batch_voters, true).unwrap_err();
-        assert!(matches!(err, Error::AlreadyVoted(_, _)));
+        assert!(matches!(err, Error::AlreadyVoted(_)));
 
         // Only the initial vote exists, batch failed entirely
         let voters_who_voted = voting.votes.get(&nominee).unwrap();
@@ -672,7 +697,7 @@ mod tests {
 
     #[test]
     fn batch_vote_normal_mode_skips_duplicates_and_invalid() {
-        let voters = create_voters(5);
+        let voters = create_voters(10);
         let voter_1 = pos(1);
         let voter_2 = pos(2);
         let voter_3 = pos(3);
@@ -721,7 +746,7 @@ mod tests {
         let batch = vec![voter_1, voter_2, voter_3];
 
         let err = voting.batch_vote(nominee, &batch, true).unwrap_err();
-        assert!(matches!(err, Error::AlreadyVoted(voter_1, _)));
+        assert!(matches!(err, Error::AlreadyVoted(position) if position == voter_1));
 
         // Only the first vote exists
         let votes_for_nominee = voting.votes.get(&nominee).unwrap();
