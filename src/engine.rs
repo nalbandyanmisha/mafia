@@ -825,8 +825,8 @@ impl Engine {
                     .game
                     .final_voting()
                     .get(&self.day)
-                    .expect("Final voting results")
-                    .len();
+                    .map(|v| v.len())
+                    .unwrap_or(0);
                 let alive_count = self.game.alive_players();
 
                 let nominees = self
@@ -972,8 +972,8 @@ impl Engine {
                     .game
                     .final_voting()
                     .get(&self.day)
-                    .expect("Final voting results")
-                    .len();
+                    .map(|v| v.len())
+                    .unwrap_or(0);
                 let alive_count = self.game.alive_players();
                 if yes_count > alive_count / 2 {
                     Evening(FinalSpeech)

@@ -825,4 +825,121 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, Error::InvalidNominee(n) if n == nominee_invalid));
     }
+
+    //////////////// next_actor /////////////////
+
+    #[test]
+    fn next_actor_returns_start_on_first_call() {
+        let nominees = vec![pos(1), pos(2), pos(3)];
+        let voters = create_voters(3);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        let next = voting.next_actor(&mut actor, |_| true);
+
+        assert_eq!(next, Some(pos(1)));
+    }
+
+    #[test]
+    fn next_actor_cycles_in_nomination_order() {
+        let nominees = vec![pos(1), pos(2), pos(3)];
+        let voters = create_voters(3);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        assert_eq!(voting.next_actor(&mut actor, |_| true), Some(pos(1)));
+        assert_eq!(voting.next_actor(&mut actor, |_| true), Some(pos(2)));
+        assert_eq!(voting.next_actor(&mut actor, |_| true), Some(pos(3)));
+        assert_eq!(voting.next_actor(&mut actor, |_| true), None);
+
+        assert!(actor.is_completed());
+    }
+
+    #[test]
+    fn next_actor_skips_ineligible_nominees() {
+        let nominees = vec![pos(1), pos(2), pos(3)];
+        let voters = create_voters(3);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        let is_eligible = |p| p != pos(2);
+
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), Some(pos(1)));
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), Some(pos(3)));
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), None);
+    }
+
+    #[test]
+    fn next_actor_single_nominee() {
+        let nominees = vec![pos(1)];
+        let voters = create_voters(1);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        assert_eq!(voting.next_actor(&mut actor, |_| true), Some(pos(1)));
+        assert_eq!(voting.next_actor(&mut actor, |_| true), None);
+    }
+
+    #[test]
+    fn next_actor_no_nominees() {
+        let voters = create_voters(3);
+        let voting = Voting::new(voters);
+        let mut actor = Actor::new(pos(1));
+
+        let next = voting.next_actor(&mut actor, |_| true);
+
+        assert_eq!(next, None);
+        assert!(actor.is_completed());
+    }
+
+    #[test]
+    // This case should not happen in rall invoirmant as I asume start is always eligible,
+    // otherwise we can end up in infinite loop if start is ineligible.
+    fn next_actor_completion_is_based_on_start_even_if_start_is_ineligible() {
+        let nominees = vec![pos(1), pos(2), pos(3)];
+        let voters = create_voters(3);
+        let voting = Voting::from_nominees(&nominees, voters);
+
+        let mut actor = Actor::new(pos(1));
+        let is_eligible = |p| p != pos(1);
+
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), Some(pos(2)));
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), Some(pos(3)));
+        assert_eq!(voting.next_actor(&mut actor, is_eligible), Some(pos(2)));
+    }
+
+    #[test]
+    fn next_actor_all_ineligible() {
+        let nominees = vec![pos(1), pos(2), pos(3)];
+        let voters = create_voters(3);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        let next = voting.next_actor(&mut actor, |_| false);
+
+        assert_eq!(next, None);
+        assert!(actor.is_completed());
+    }
+
+    #[test]
+    fn next_actor_does_not_repeat() {
+        let nominees = vec![pos(1), pos(2)];
+        let voters = create_voters(2);
+
+        let voting = Voting::from_nominees(&nominees, voters);
+        let mut actor = Actor::new(pos(1));
+
+        let first = voting.next_actor(&mut actor, |_| true);
+        let second = voting.next_actor(&mut actor, |_| true);
+        let third = voting.next_actor(&mut actor, |_| true);
+
+        assert_eq!(first, Some(pos(1)));
+        assert_eq!(second, Some(pos(2)));
+        assert_eq!(third, None);
+    }
 }
