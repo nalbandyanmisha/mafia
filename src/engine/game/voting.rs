@@ -10,7 +10,7 @@ use crate::{
     snapshot::{self, Snapshot},
 };
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Voting {
     nominations: HashMap<Position, Position>, // nominator -> nominee
     nominees: Vec<Position>,                  // ordered
@@ -18,7 +18,7 @@ pub struct Voting {
     votes: HashMap<Position, Vec<Position>>, // nominee -> voters
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum Event {
     Nominated {
         nominator: Position,
@@ -46,7 +46,7 @@ impl fmt::Display for Event {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Nominator {0:?} has already made a nomination")]
-    NominationAlreadyExists(Position),
+    AlreadyNominated(Position),
 
     #[error("Voter {0:?} has already voted for {1:?}")]
     AlreadyVoted(Position, Position),
@@ -179,7 +179,7 @@ impl Voting {
         }
 
         if self.nominations.contains_key(&nominator) {
-            return Err(Error::NominationAlreadyExists(nominator));
+            return Err(Error::AlreadyNominated(nominator));
         }
 
         self.nominations.insert(nominator, nominee);
@@ -291,6 +291,21 @@ mod tests {
     }
 
     #[test]
+    fn nomination_records_nominee() {
+        let voters = create_voters(10);
+        let nominator = pos(1);
+        let nominee = pos(3);
+
+        let mut voting = Voting::new(voters);
+
+        let event = voting.nominate(nominator, nominee).unwrap();
+
+        assert!(voting.nominees.contains(&nominee));
+        assert_eq!(voting.nominees, vec![nominee]);
+        assert_eq!(event, vec![Event::Nominated { nominator, nominee }]);
+    }
+
+    #[test]
     fn nomination_adds_nominee_only_once() {
         let voters = create_voters(10);
         let nominator_a = pos(1);
@@ -317,7 +332,7 @@ mod tests {
         voting.nominate(nominator, first_nominee).unwrap();
         let err = voting.nominate(nominator, second_nominee).unwrap_err();
 
-        assert!(matches!(err, Error::NominationAlreadyExists(_)));
+        assert!(matches!(err, Error::AlreadyNominated(position) if position == nominator));
     }
 
     #[test]
@@ -329,7 +344,7 @@ mod tests {
         let nominee = pos(3);
 
         let err = voting.nominate(non_voter, nominee).unwrap_err();
-        assert!(matches!(err, Error::InvalidNominator(_))); // Using current code error
+        assert!(matches!(err, Error::InvalidNominator(position) if position == non_voter)); // Using current code error
     }
 
     #[test]

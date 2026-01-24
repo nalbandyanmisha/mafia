@@ -385,33 +385,52 @@ impl Game {
         let events = self
             .voting
             .entry(day)
-            .or_default()
+            .or_insert(Voting::new(
+                self.players
+                    .iter()
+                    .filter_map(|p| if p.is_alive() { p.position() } else { None })
+                    .collect(),
+            ))
             .nominate(nominator, nominee)?;
         Ok(events.into_iter().map(Event::Voting).collect())
     }
 
-    pub fn add_vote(
+    pub fn add_vote_batch(
         &mut self,
         day: DayIndex,
         pool: Pool,
-        voter: Position,
         nominee: Position,
+        voters: &[Position],
     ) -> Result<Vec<Event>, Error> {
         match pool {
             Pool::Main => {
-                let voting = self.voting.entry(day).or_default();
-                let events = voting.vote(voter, nominee)?;
+                let voting = self.voting.entry(day).or_insert(Voting::new(
+                    self.players
+                        .iter()
+                        .filter_map(|p| if p.is_alive() { p.position() } else { None })
+                        .collect(),
+                ));
+                let events = voting.batch_vote(nominee, voters, false)?;
                 Ok(events.into_iter().map(Event::Voting).collect())
             }
             Pool::Tie => {
-                let voting = self.tie_voting.entry(day).or_default();
-                let events = voting.vote(voter, nominee)?;
+                let voting = self.tie_voting.entry(day).or_insert(Voting::new(
+                    self.players
+                        .iter()
+                        .filter_map(|p| if p.is_alive() { p.position() } else { None })
+                        .collect(),
+                ));
+                let events = voting.batch_vote(nominee, voters, false)?;
                 Ok(events.into_iter().map(Event::Voting).collect())
             }
             Pool::Final => {
+                let mut events = Vec::new();
                 let voting = self.final_voting.entry(day).or_default();
-                voting.push(voter);
-                Ok(vec![Event::FinalVoting(voter)])
+                for &voter in voters {
+                    voting.push(voter);
+                    events.push(Event::FinalVoting(voter));
+                }
+                Ok(events)
             }
         }
     }

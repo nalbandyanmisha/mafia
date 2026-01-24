@@ -355,10 +355,13 @@ impl Engine {
                     .current()
                     .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
 
-                for voter in voters {
-                    self.game
-                        .add_vote(self.day, game::Pool::Main, voter, nominee)?;
-                }
+                self.game
+                    .add_vote_batch(self.day, game::Pool::Main, nominee, &voters)?;
+
+                // for voter in voters {
+                //     self.game
+                //         .add_vote(self.day, game::Pool::Main, voter, nominee)?;
+                // }
             }
 
             // ---------- TIE VOTING ----------
@@ -368,22 +371,31 @@ impl Engine {
                     .current()
                     .ok_or_else(|| anyhow!("No active nominee. Call AdvanceActor first"))?;
 
-                for voter in voters {
-                    self.game
-                        .add_vote(self.day, game::Pool::Tie, voter, nominee)?;
-                }
+                self.game
+                    .add_vote_batch(self.day, game::Pool::Tie, nominee, &voters)?;
+                // for voter in voters {
+                //     self.game
+                //         .add_vote(self.day, game::Pool::Tie, voter, nominee)?;
+                // }
             }
 
             // ---------- FINAL YES / NO ----------
             Activity::Evening(EveningActivity::FinalVoting) => {
-                for voter in voters {
-                    self.game.add_vote(
-                        self.day,
-                        game::Pool::Final,
-                        voter,
-                        Position::new(0), /* placholder TODO */
-                    )?;
-                }
+                self.game.add_vote_batch(
+                    self.day,
+                    game::Pool::Final,
+                    Position::new(0), /* placholder TODO */
+                    &voters,
+                )?;
+
+                // for voter in voters {
+                //     self.game.add_vote(
+                //         self.day,
+                //         game::Pool::Final,
+                //         voter,
+                //         Position::new(0), /* placholder TODO */
+                //     )?;
+                // }
             }
 
             _ => bail!("Not in a voting phase"),
