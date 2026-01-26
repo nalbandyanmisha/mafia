@@ -35,6 +35,9 @@ pub enum Event {
     Skipped {
         nominee: Position,
     }, // 0 vote registered
+    Finalized {
+        nominee: Position,
+    },
 }
 
 impl fmt::Display for Event {
@@ -51,6 +54,9 @@ impl fmt::Display for Event {
                     f,
                     "Nominee at position {nominee} received no votes and was skipped"
                 )
+            }
+            Event::Finalized { nominee } => {
+                write!(f, "Nominee at position {nominee} has been finalized")
             }
         }
     }
@@ -110,6 +116,12 @@ impl Turn for Voting {
 
         if self.nominees.is_empty() {
             actor.mark_completed();
+            return None;
+        }
+
+        if self.remaining_voters.is_empty() {
+            actor.mark_completed();
+            // caller can collect skipped events via a separate step if needed
             return None;
         }
 
@@ -185,6 +197,46 @@ impl Voting {
 
     pub fn is_eligible(&self, pos: Position) -> bool {
         self.remaining_voters.contains(&pos)
+    }
+
+    pub fn is_finalized(&self) -> bool {
+        self.remaining_voters.is_empty()
+    }
+
+    pub fn remaining_nominees(&self) -> HashSet<Position> {
+        self.remaining_nominees.clone()
+    }
+
+    pub fn remaining_voters(&self) -> HashSet<Position> {
+        self.remaining_voters.clone()
+    }
+
+    pub fn finalize_nominee(&mut self, nominee: Position) -> Option<Event> {
+        if self.remaining_nominees.remove(&nominee) && !self.votes.contains_key(&nominee) {
+            return Some(Event::Skipped { nominee });
+        }
+        None
+    }
+
+    pub fn cast_implicit_votes_for_nominee(&mut self) -> Vec<Event> {
+        let mut events = Vec::new();
+
+        let nominee = self
+            .nominees
+            .last()
+            .copied()
+            .expect("At least one nominee exists");
+        let voters: Vec<_> = self.remaining_voters.drain().collect();
+
+        for voter in voters {
+            self.votes.entry(nominee).or_default().push(voter);
+            self.remaining_voters.remove(&voter);
+            events.push(Event::Voted { voter, nominee });
+        }
+
+        events.extend(self.finalize_nominee(nominee));
+
+        events
     }
 
     pub fn nominate(

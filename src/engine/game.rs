@@ -439,6 +439,10 @@ impl Game {
         &self.voting
     }
 
+    pub fn voting_mut(&mut self) -> &mut HashMap<DayIndex, Voting> {
+        &mut self.voting
+    }
+
     pub fn tie_voting(&self) -> &HashMap<DayIndex, Voting> {
         &self.tie_voting
     }

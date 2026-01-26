@@ -357,11 +357,6 @@ impl Engine {
 
                 self.game
                     .add_vote_batch(self.day, game::Pool::Main, nominee, &voters)?;
-
-                // for voter in voters {
-                //     self.game
-                //         .add_vote(self.day, game::Pool::Main, voter, nominee)?;
-                // }
             }
 
             // ---------- TIE VOTING ----------
@@ -373,10 +368,6 @@ impl Engine {
 
                 self.game
                     .add_vote_batch(self.day, game::Pool::Tie, nominee, &voters)?;
-                // for voter in voters {
-                //     self.game
-                //         .add_vote(self.day, game::Pool::Tie, voter, nominee)?;
-                // }
             }
 
             // ---------- FINAL YES / NO ----------
@@ -387,15 +378,6 @@ impl Engine {
                     Position::new(0), /* placholder TODO */
                     &voters,
                 )?;
-
-                // for voter in voters {
-                //     self.game.add_vote(
-                //         self.day,
-                //         game::Pool::Final,
-                //         voter,
-                //         Position::new(0), /* placholder TODO */
-                //     )?;
-                // }
             }
 
             _ => bail!("Not in a voting phase"),
@@ -715,18 +697,57 @@ impl Engine {
 
             // -------- Evening --------
             Evening(Voting) => {
+                let mut events = Vec::new();
                 let voting = self
                     .game
                     .voting()
                     .get(&self.day)
-                    .expect("Voting must exist");
+                    .expect("Voting must exist")
+                    .clone();
                 let voters = self
                     .game
                     .players()
                     .iter()
                     .filter_map(|p| if p.is_alive() { p.position() } else { None })
                     .collect::<HashSet<Position>>();
+                let nominees = voting.get_nominees();
+                let remaining_voters = voting.remaining_voters();
+                let previous_actor = self.actor.current();
 
+                if let Some(previous_actor) = previous_actor {
+                    self.game
+                        .voting_mut()
+                        .get_mut(&self.day)
+                        .expect("Voting must exist")
+                        .finalize_nominee(previous_actor);
+                    events.push(Event::Game(game::Event::Voting(
+                        game::voting::Event::Finalized {
+                            nominee: previous_actor,
+                        },
+                    )));
+
+                    if previous_actor == nominees[nominees.len() - 1]
+                        && !remaining_voters.is_empty()
+                    {
+                        self.game
+                            .voting_mut()
+                            .get_mut(&self.day)
+                            .expect("Voting must exist")
+                            .cast_implicit_votes_for_nominee()
+                            .into_iter()
+                            .for_each(|e| {
+                                events.push(Event::Game(game::Event::Voting(e)));
+                            });
+                    }
+                }
+
+                // borrow voting again so would have up to date voting state
+                // in case it was mutated above
+                let voting = self
+                    .game
+                    .voting()
+                    .get(&self.day)
+                    .expect("Voting must exist");
                 voting.next_actor(&mut self.actor, |_| true);
 
                 if self.actor.is_completed() {
@@ -745,7 +766,7 @@ impl Engine {
                             .unwrap()
                             .mark_eliminated()?;
                         self.actor.reset(winners[0]);
-                        self.set_phase(next)?;
+                        self.set_phase(self.next(current))?;
                     } else {
                         self.game.tie_voting_mut().insert(
                             self.day,
@@ -758,7 +779,7 @@ impl Engine {
                             .expect("Tie Voting must exist")
                             .get_nominees();
                         self.actor.reset(tie_nominees[0]);
-                        self.set_phase(next)?;
+                        self.set_phase(self.next(current))?;
                     }
                     vec![Event::PhaseAdvanced {
                         from: current,
@@ -789,12 +810,51 @@ impl Engine {
                 }
             }
             Evening(TieVoting) => {
+                let mut events = Vec::new();
                 let voting = self
                     .game
                     .tie_voting()
                     .get(&self.day)
-                    .expect("Tie Voting must exist");
+                    .expect("Tie Voting must exist")
+                    .clone();
+                let nominees = voting.get_nominees();
+                let remaining_voters = voting.remaining_voters();
+                let previous_actor = self.actor.current();
 
+                if let Some(previous_actor) = previous_actor {
+                    self.game
+                        .tie_voting_mut()
+                        .get_mut(&self.day)
+                        .expect("Voting must exist")
+                        .finalize_nominee(previous_actor);
+                    events.push(Event::Game(game::Event::Voting(
+                        game::voting::Event::Finalized {
+                            nominee: previous_actor,
+                        },
+                    )));
+
+                    if previous_actor == nominees[nominees.len() - 1]
+                        && !remaining_voters.is_empty()
+                    {
+                        self.game
+                            .tie_voting_mut()
+                            .get_mut(&self.day)
+                            .expect("Voting must exist")
+                            .cast_implicit_votes_for_nominee()
+                            .into_iter()
+                            .for_each(|e| {
+                                events.push(Event::Game(game::Event::Voting(e)));
+                            });
+                    }
+                }
+
+                // borrow voting again so would have up to date voting state
+                // in case it was mutated above
+                let voting = self
+                    .game
+                    .tie_voting()
+                    .get(&self.day)
+                    .expect("Voting must exist");
                 voting.next_actor(&mut self.actor, |_| true);
 
                 if self.actor.is_completed() {
@@ -948,7 +1008,7 @@ impl Engine {
                     .voting()
                     .get(&self.day)
                     .expect("Voting must exist at Voting");
-                if voting.winners().len() == 1 {
+                if voting.is_finalized() && voting.winners().len() == 1 {
                     Evening(FinalSpeech)
                 } else {
                     Evening(TieDiscussion)
@@ -961,7 +1021,7 @@ impl Engine {
                     .tie_voting()
                     .get(&self.day)
                     .expect("Voting must exist at Voting");
-                if voting.winners().len() == 1 {
+                if voting.is_finalized() && voting.winners().len() == 1 {
                     Evening(FinalSpeech)
                 } else {
                     Evening(FinalVoting)
