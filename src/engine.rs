@@ -268,6 +268,10 @@ impl Engine {
             .ok_or(Error::Game(game::Error::PlayerByPositionNotFound(target)))?
             .warn()?; // returns Vec<player::Event>
 
+        if self.game.player_by_position(target).unwrap().is_removed() {
+            self.set_phase(Activity::Night(NightActivity::MafiaShooting))?;
+            self.day.advance();
+        }
         Ok(events
             .into_iter()
             .map(game::Event::Player)

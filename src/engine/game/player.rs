@@ -370,9 +370,9 @@ impl Player {
     pub fn is_dead(&self) -> bool {
         matches!(self.status, Status::Dead | Status::Eliminated)
     }
-    // pub fn is_removed(&self) -> bool {
-    //     self.status == Status::Removed
-    // }
+    pub fn is_removed(&self) -> bool {
+        self.status == Status::Removed
+    }
     pub fn is_eliminated(&self) -> bool {
         self.status == Status::Eliminated
     }
