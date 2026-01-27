@@ -655,6 +655,19 @@ impl Engine {
 
             // -------- Day --------
             Noon(Discussion) => {
+                let previous_actor = self.actor.current();
+
+                if let Some(previous_actor) = previous_actor {
+                    let player = self
+                        .game
+                        .player_by_position_mut(previous_actor)
+                        .expect("Player at given position must exist");
+
+                    if player.is_silenced() {
+                        player.restore_speaking();
+                    }
+                }
+
                 self.game.next_actor(&mut self.actor, |pos| {
                     self.game
                         .player_by_position(pos)

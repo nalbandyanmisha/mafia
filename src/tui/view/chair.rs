@@ -20,6 +20,7 @@ pub enum ChairState {
     Eliminated,
     Removed,
 
+    RoleAssignment,
     Speaking,
     Muted,
     Candidate,
@@ -46,12 +47,32 @@ impl ChairView {
 
         let state = match &player_view {
             None => ChairState::Empty,
-            Some(view) => match view.status {
-                Status::Alive => ChairState::Alive,
-                Status::Dead => ChairState::Dead,
-                Status::Eliminated => ChairState::Eliminated,
-                Status::Removed => ChairState::Removed,
-            },
+            Some(view) => {
+                // 1️⃣ Terminal states FIRST
+                match view.status {
+                    Status::Dead => ChairState::Dead,
+                    Status::Eliminated => ChairState::Eliminated,
+                    Status::Removed => ChairState::Removed,
+                    Status::Alive => {
+                        // 2️⃣ Warnings / silence
+                        if view.warnings == 3 && view.is_silenced {
+                            ChairState::Muted
+                        }
+                        // 3️⃣ Active player states
+                        else if app.engine.actor == Some(position) {
+                            match app.engine.phase.unwrap().daytime() {
+                                Night => ChairState::RoleAssignment,
+                                Morning | Noon => ChairState::Speaking,
+                                Evening => ChairState::Candidate,
+                            }
+                        }
+                        // 4️⃣ Default alive
+                        else {
+                            ChairState::Alive
+                        }
+                    }
+                }
+            }
         };
 
         let highlight = app.engine.actor == Some(position);

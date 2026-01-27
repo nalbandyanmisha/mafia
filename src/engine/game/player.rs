@@ -171,6 +171,7 @@ impl Snapshot for Player {
             position: self.position,
             role: self.role,
             warnings: self.warnings,
+            is_silenced: self.penalty.silenced,
             status: self.status,
         }
     }
@@ -340,6 +341,10 @@ impl Player {
         }])
     }
 
+    pub fn restore_speaking(&mut self) {
+        self.penalty.silenced = false;
+    }
+
     // ----------- Accessors ----------
     pub fn name(&self) -> &str {
         &self.name
@@ -356,9 +361,9 @@ impl Player {
     // pub fn warnings(&self) -> u8 {
     //     self.warnings
     // }
-    // pub fn is_silenced(&self) -> bool {
-    //     self.penalty.silenced
-    // }
+    pub fn is_silenced(&self) -> bool {
+        self.penalty.silenced
+    }
 
     // ----------- Queries ----------
     pub fn has_role(&self) -> bool {

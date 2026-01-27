@@ -13,6 +13,7 @@ pub struct Player {
     pub name: String,
     pub position: Option<Position>,
     pub role: Option<Role>,
+    pub is_silenced: bool,
     pub warnings: u8,
     pub status: Status,
 }

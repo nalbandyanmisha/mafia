@@ -36,7 +36,7 @@ pub fn draw(frame: &mut Frame, l: &layout::Player, view: &PlayerView) {
     if let Some(role) = &view.role {
         lines.push(Line::from(Span::styled(
             format!("🎭 {role}"),
-            Style::default().fg(Color::Magenta),
+            Style::default().fg(Color::White),
         )));
     }
 

@@ -7,6 +7,7 @@ pub struct PlayerView {
     pub warnings: u8,
     pub status: Status,
     pub is_nominated: bool,
+    pub is_silenced: bool,
     pub nominated: Option<Position>,
 }
 
@@ -31,6 +32,8 @@ impl PlayerView {
             .iter()
             .any(|n| n == &position);
 
+        let is_silenced = player.is_silenced;
+
         let nominated = app
             .engine
             .game
@@ -49,6 +52,7 @@ impl PlayerView {
             warnings: player.warnings,
             status: player.status,
             is_nominated,
+            is_silenced,
             nominated,
         }
     }

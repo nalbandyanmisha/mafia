@@ -2,6 +2,7 @@ use ratatui::{
     Frame,
     layout::Alignment,
     style::{Color, Modifier, Style},
+    text::Span,
     widgets::{Block, BorderType, Borders},
 };
 
@@ -37,32 +38,57 @@ fn build_chair_frame(view: &ChairView) -> Block<'static> {
         ),
         ChairState::Speaking => (
             Style::default()
-                .fg(Color::Blue)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
             "🗣️",
         ),
-        ChairState::Muted => (
-            Style::default().fg(Color::Gray).add_modifier(Modifier::DIM),
-            "🤐",
-        ),
-        ChairState::Candidate => (Style::default().fg(Color::Magenta), "🎯"),
+        ChairState::Muted => (Style::default().fg(Color::Gray), "🤐"),
+        ChairState::RoleAssignment => (Style::default().fg(Color::Magenta), "🎭"),
+        ChairState::Candidate => (Style::default().fg(Color::Blue), "🎯"),
     };
 
-    let border_style = if view.highlight {
-        Style::default()
-            .fg(view.border_style)
-            .add_modifier(Modifier::BOLD)
+    let is_terminal = matches!(
+        view.state,
+        ChairState::Dead | ChairState::Eliminated | ChairState::Removed
+    );
+
+    let is_muted = matches!(view.state, ChairState::Muted);
+
+    // 1️⃣ Base border style (color authority)
+    let mut border_style = if is_terminal {
+        Style::default().fg(Color::Red)
     } else {
-        Style::default()
-            .fg(Color::Green)
-            .add_modifier(Modifier::BOLD)
+        Style::default().fg(view.border_style)
     };
 
+    // 2️⃣ Modifiers (can stack)
+    if is_muted {
+        border_style = border_style.add_modifier(Modifier::DIM);
+    }
+
+    if view.highlight {
+        border_style = border_style
+            .add_modifier(Modifier::BOLD)
+            .bg(border_style.fg.unwrap_or(Color::Green));
+    }
+
+    // 3️⃣ Title (ALWAYS reset bg)
+    let title = Span::styled(
+        format!(" {pos} ({icon}) "),
+        Style::default()
+            .fg(Color::White)
+            .bg(Color::Reset)
+            .add_modifier(if view.highlight {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            }),
+    );
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(border_style)
-        .title(format!("Chair {pos} ({icon})"))
+        .title(title)
         .title_alignment(Alignment::Center)
         .style(style)
 }
