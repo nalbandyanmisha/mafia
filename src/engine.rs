@@ -305,21 +305,9 @@ impl Engine {
     fn check(&mut self, target: Position) -> Result<Vec<Event>> {
         match self.phase()? {
             Activity::Night(NightActivity::SheriffCheck) => {
-                let by = self
-                    .actor
-                    .current()
-                    .ok_or_else(|| anyhow::anyhow!("No active actor"))?;
-                self.ensure_alive(by)?;
-                self.ensure_alive(target)?;
                 self.game.record_sheriff_check(self.day, target)?;
             }
             Activity::Night(NightActivity::DonCheck) => {
-                let by = self
-                    .actor
-                    .current()
-                    .ok_or_else(|| anyhow::anyhow!("No active actor"))?;
-                self.ensure_alive(by)?;
-                self.ensure_alive(target)?;
                 self.game.record_don_check(self.day, target)?;
             }
             _ => bail!("Not in investigation phase"),
