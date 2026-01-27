@@ -391,15 +391,7 @@ impl Engine {
         let event = match current {
             // -------- Night --------
             Night(RoleAssignment) => {
-                if self.actor.current().is_some_and(|position| {
-                    !self
-                        .game
-                        .player_by_position(position)
-                        .expect("Player at {position} must exist")
-                        .has_role()
-                }) {
-                    return Ok(vec![]);
-                }
+                // 1. Always advance actor first
                 self.game.next_actor(&mut self.actor, |pos| {
                     self.game
                         .player_by_position(pos)
@@ -407,6 +399,7 @@ impl Engine {
                         .unwrap_or(false)
                 });
 
+                // 2. If phase completed → transition
                 if self.actor.is_completed() {
                     self.actor.reset(
                         self.game
@@ -422,12 +415,23 @@ impl Engine {
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
-                        to: self
-                            .actor
-                            .current()
-                            .expect("Actor must exist at role assignment"),
-                    }]
+                    // 3. Assign role to the NEW current actor if needed
+                    let position = self
+                        .actor
+                        .current()
+                        .expect("Actor must exist during role assignment");
+
+                    if self
+                        .game
+                        .player_by_position(position)
+                        .expect("Player must exist")
+                        .role()
+                        .is_none()
+                    {
+                        self.assign_role(position)?;
+                    }
+
+                    vec![Event::ActorAdvanced { to: position }]
                 }
             }
             Night(SheriffReveal) => {
