@@ -1,5 +1,3 @@
-use crate::domain::Position;
-
 #[derive(Debug, Clone)]
 pub struct Actor {
     pub actor: String,          // who is acting now

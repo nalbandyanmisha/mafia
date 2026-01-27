@@ -21,7 +21,7 @@ pub struct HostView {
     pub title: String, // 🌙 NIGHT · Day 2
     pub title_style: Color,
     pub header: Header, // activity name + phase info (nominees/checks)
-    pub main: Main,     // active actor / instructions + timer + results
+    pub body: Main,     // active actor / instructions + timer + results
     pub footer: Footer, // list of host commands
 }
 
@@ -45,7 +45,7 @@ impl HostView {
             .fold(0, |c, p| if p.status == Status::Alive { c + 1 } else { c });
         let out_p_c = 10 - in_p_c;
 
-        let main = if engine.actor.is_some() {
+        let body = if engine.actor.is_some() {
             Main::Actor(Actor::new(
                 host_text.actor.expect("actor should exist at this point"),
                 host_text.timer,
@@ -58,9 +58,9 @@ impl HostView {
         Self {
             title,
             title_style,
-            header: Header::new(in_p_c, out_p_c, host_text.title, host_text.subtitle),
-            main,
-            footer: Footer::new(&host_text.commands),
+            header: Header::new(in_p_c, out_p_c, host_text.title),
+            body,
+            footer: Footer::new(&host_text.info.expect("info should exist")),
         }
     }
 }
@@ -68,17 +68,15 @@ impl HostView {
 pub struct Text {
     // Header
     pub title: String,
-    pub subtitle: Option<String>,
 
     // Main content
     pub description: Option<String>,
-    pub context: Option<String>,
     pub actor: Option<String>,
     pub timer: Option<u64>, // future, keep optional
     pub result: Option<String>,
 
     //Footer
-    pub commands: Vec<String>,
+    pub info: Option<String>,
 }
 
 pub struct TextBuilder {
@@ -90,29 +88,17 @@ impl TextBuilder {
         Self {
             text: Text {
                 title: title.into(),
-                subtitle: None,
                 description: None,
-                context: None,
                 actor: None,
                 timer: None,
                 result: None,
-                commands: Vec::new(),
+                info: Some(String::new()),
             },
         }
     }
 
-    pub fn subtitle(mut self, s: impl Into<String>) -> Self {
-        self.text.subtitle = Some(s.into());
-        self
-    }
-
     pub fn description(mut self, s: impl Into<String>) -> Self {
         self.text.description = Some(s.into());
-        self
-    }
-
-    pub fn context(mut self, s: impl Into<String>) -> Self {
-        self.text.context = Some(s.into());
         self
     }
 
@@ -131,13 +117,8 @@ impl TextBuilder {
         self
     }
 
-    pub fn command(mut self, c: impl Into<String>) -> Self {
-        self.text.commands.push(c.into());
-        self
-    }
-
-    pub fn commands(mut self, cmds: &[&str]) -> Self {
-        self.text.commands = cmds.iter().map(|s| s.to_string()).collect();
+    pub fn info(mut self, info: &str) -> Self {
+        self.text.info = Some(info.to_string());
         self
     }
 
@@ -293,18 +274,15 @@ impl Text {
     fn role_assignment(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
         let remaining = players.iter().filter(|p| p.role.is_none()).count();
         let mut builder =
-            TextBuilder::new("Role Assignment").subtitle(format!("Remaining: {remaining}"));
+            TextBuilder::new("Role Assignment").info(&format!("Remaining: {remaining}"));
 
         match actor {
             None => {
                 // No active actor yet – show initial description
-                builder = builder
-                    .description(
-                        "Assign roles to players one by one.\n\
-                     Run `next` to select the next unassigned player.\n\
-                     Use `assign` to give them a role.",
-                    )
-                    .commands(&["next", "warn"])
+                builder = builder.description(
+                    "Assign roles to players one by one.\n\
+                     Run `next` to woke up next player and assign a role.\n",
+                )
             }
             Some(position) => {
                 let active_player = players
@@ -314,21 +292,18 @@ impl Text {
 
                 builder = builder
                     .actor(format!(
-                        "Player {} at position {position} is waiting.\n\
-                        Run `assign` to reveal their role.",
+                        "{} at {position} is waiting.\n",
                         active_player.name
                     ))
-                    .commands(&["assign", "warn"])
                     .timer(timer);
 
                 if let Some(role) = active_player.role {
                     builder = builder
                         .actor(format!(
-                            "Player {} at {position} received their role.",
+                            "{} at {position} received role.",
                             active_player.name
                         ))
-                        .result(format!("Role assigned: {role}"))
-                        .commands(&["next", "warn"]);
+                        .result(format!("{role}"))
                 }
             }
         }
@@ -342,17 +317,15 @@ impl Text {
         players: &[Player],
         timer: Option<u64>,
     ) -> Text {
-        let mut builder = TextBuilder::new(title).subtitle("Confirming identity");
+        let mut builder = TextBuilder::new(title).info("Confirming identity");
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "Wake the {role} so they can confirm their role.\n\
+                builder = builder.description(format!(
+                    "Wake the {role} so they can confirm their role.\n\
                      The {role} will have a few seconds to look around.\n\
                      Run `next` to begin."
-                    ))
-                    .commands(&["next", "warn"]);
+                ))
             }
             Some(position) => {
                 let player = players
@@ -366,7 +339,6 @@ impl Text {
                         player.name
                     ))
                     .timer(timer)
-                    .commands(&["next", "warn"]);
             }
         }
 
@@ -383,25 +355,22 @@ impl Text {
             .join(", ");
 
         let mut builder = TextBuilder::new("Mafia Briefing")
-            .subtitle(format!("Members at positions: {mafia_positions}"));
+            .info(&format!("Members at positions: {mafia_positions}"));
 
         match actor {
             None => {
                 // No active actor yet – description for host
-                builder = builder
-                    .description(
-                        "Wake the Don and Mafia players.\n\
+                builder = builder.description(
+                    "Wake the Don and Mafia players.\n\
                      They have 60s to discuss strategy.\n\
                      Run `next` to start the timer.",
-                    )
-                    .commands(&["next", "warn"]);
+                )
             }
             Some(_) => {
                 // During the briefing – no individual actor
                 builder = builder
                     .actor("Mafia members are briefing.".to_string())
                     .timer(timer)
-                    .commands(&["next", "warn"]);
             }
         }
 
@@ -418,27 +387,24 @@ impl Text {
             .join(", ");
 
         let mut builder = TextBuilder::new("Mafia Shooting")
-            .subtitle(format!("Mafia members at positions: {mafia_positions}"));
+            .info(&format!("Mafia members at positions: {mafia_positions}"));
 
         match actor {
             None => {
                 // No active actor yet – instructions for host
-                builder = builder
-                    .description(
-                        "Mafia will choose a target.\n\
+                builder = builder.description(
+                    "Mafia will choose a target.\n\
                      If all shoot the same target, it's a kill.\n\
                      If any miss, the shot fails.\n\
                      Use `shoot n` to record a hit.\n\
                      Running `next` without recording counts as a miss.",
-                    )
-                    .commands(&["next", "shoot", "warn"]);
+                )
             }
             Some(_) => {
                 // Active mafia shooting – no individual actor
                 builder = builder
                     .actor("Mafia are executing their shot...".to_string())
                     .timer(timer)
-                    .commands(&["next", "shoot", "warn"]);
             }
         }
 
@@ -479,18 +445,16 @@ impl Text {
             String::new()
         };
 
-        let mut builder = TextBuilder::new(title).subtitle(subtitle);
+        let mut builder = TextBuilder::new(title).info(&subtitle);
 
         match actor {
             None => {
                 // No active actor yet – show instructions
-                builder = builder
-                    .description(format!(
-                        "Wake the {role} to check a player.\n\
+                builder = builder.description(format!(
+                    "Wake the {role} to check a player.\n\
                      They have 10 seconds to act.\n\
                      Run `next` to select the {role}",
-                    ))
-                    .commands(&["next", "warn"]);
+                ))
             }
             Some(position) => {
                 // Find the active player
@@ -501,11 +465,10 @@ impl Text {
 
                 builder = builder
                     .actor(format!(
-                        "Player {} at position {position} is the {}.",
+                        "{} at {position} is the {}.",
                         active_player.name, role
                     ))
-                    .timer(timer)
-                    .commands(&["next", "warn", "check"]);
+                    .timer(timer);
 
                 // Add result if check exists
                 if let Some(check) = checks.get(&day) {
@@ -541,18 +504,16 @@ impl Text {
         timer: Option<u64>,
         guesses: &[Position],
     ) -> Text {
-        let mut builder = TextBuilder::new("Mafia Guessing").subtitle("Last suspicion");
+        let mut builder = TextBuilder::new("Mafia Guessing").info("Last suspicion");
 
         match actor {
             None => {
-                builder = builder
-                    .description(
-                        "Wake the killed player.\n\
+                builder = builder.description(
+                    "Wake the killed player.\n\
                      They have 10s to name up to 3 mafia suspects.\n\
                      Run `next` to start the timer.\n\
                      If no guesses are recorded, it counts as none.",
-                    )
-                    .commands(&["next", "warn"]);
+                );
             }
 
             Some(position) => {
@@ -575,13 +536,9 @@ impl Text {
                 };
 
                 builder = builder
-                    .actor(format!(
-                        "Player {} at position {position} was killed",
-                        dead_player.name
-                    ))
+                    .actor(format!("{} at {position} was killed", dead_player.name))
                     .timer(timer)
-                    .result(result)
-                    .commands(&["next", "warn", "guess"]);
+                    .result(result);
             }
         }
 
@@ -589,17 +546,15 @@ impl Text {
     }
 
     fn death_speech(actor: Option<Position>, players: &[Player], timer: Option<u64>) -> Text {
-        let mut builder = TextBuilder::new("Final Speech").subtitle("Last words");
+        let mut builder = TextBuilder::new("Final Speech").info("Last words");
 
         match actor {
             None => {
-                builder = builder
-                    .description(
-                        "The killed player is allowed a final speech.\n\
+                builder = builder.description(
+                    "The killed player is allowed a final speech.\n\
                      They have 60s to share their last thoughts.\n\
                      Run `next` to select the player and start the timer.",
-                    )
-                    .commands(&["next", "warn"]);
+                )
             }
 
             Some(position) => {
@@ -610,11 +565,10 @@ impl Text {
 
                 builder = builder
                     .actor(format!(
-                        "Player {} at position {position} is giving final speech.",
+                        "{} at {position} is giving final speech.",
                         player.name
                     ))
                     .timer(timer)
-                    .commands(&["next", "warn"]);
             }
         }
 
@@ -641,17 +595,15 @@ impl Text {
             format!("Nominees: {nominated}")
         };
 
-        let mut builder = TextBuilder::new("Discussion").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Discussion").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(
-                        "Players may speak one by one.\n\
+                builder = builder.description(
+                    "Players may speak one by one.\n\
                      Each player has 60s to talk.\n\
                      Run `next` to select the next speaker.",
-                    )
-                    .commands(&["next", "warn"]);
+                )
             }
 
             Some(position) => {
@@ -661,12 +613,8 @@ impl Text {
                     .expect("Player with given position should exist");
 
                 builder = builder
-                    .actor(format!(
-                        "Player {} at position {position} is speaking.",
-                        player.name
-                    ))
-                    .timer(timer)
-                    .commands(&["next", "nominate", "warn"]);
+                    .actor(format!("{} at {position} is speaking.", player.name))
+                    .timer(timer);
 
                 if let Some(nominated) = nominations.get(&position) {
                     builder = builder.result(format!("Nominated player at position {nominated}"));
@@ -696,18 +644,16 @@ impl Text {
             format!("Nominees: {nominees_list}")
         };
 
-        let mut builder = TextBuilder::new("Voting").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Voting").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "The following players are nominated:\n{nominees_list}\n\
+                builder = builder.description(format!(
+                    "The following players are nominated:\n{nominees_list}\n\
                      Votes are cast nominee by nominee.\n\
                      Use `vote <positions>` to record votes.\n\
                      Run `next` to move to the next nominee.",
-                    ))
-                    .commands(&["next", "vote", "warn"]);
+                ))
             }
 
             Some(position) => {
@@ -717,16 +663,12 @@ impl Text {
                     .expect("Player with given position should exist");
 
                 builder = builder
-                    .actor(format!(
-                        "Voting for Player {} at position {position}.",
-                        player.name
-                    ))
-                    .timer(timer)
-                    .commands(&["next", "vote", "warn"]);
+                    .actor(format!("Voting for {} at {position}.", player.name))
+                    .timer(timer);
 
                 if let Some(voters) = votes.get(&position) {
                     builder = builder.result(format!(
-                        "Votes from: {}",
+                        "Votes received: {}",
                         voters
                             .iter()
                             .map(|p| p.value().to_string())
@@ -758,17 +700,15 @@ impl Text {
             format!("Tied: {tied_list}")
         };
 
-        let mut builder = TextBuilder::new("Tie Discussion").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Tie Discussion").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "The vote resulted in a tie between:\n{tied_list}\n\
+                builder = builder.description(format!(
+                    "The vote resulted in a tie between:\n{tied_list}\n\
                      Each tied player gets 30s to speak.\n\
                      Run `next` to begin.",
-                    ))
-                    .commands(&["next", "warn"]);
+                ))
             }
 
             Some(position) => {
@@ -778,12 +718,8 @@ impl Text {
                     .expect("Player with given position should exist");
 
                 builder = builder
-                    .actor(format!(
-                        "Player {} at position {position} is speaking.",
-                        player.name
-                    ))
-                    .timer(timer)
-                    .commands(&["next", "warn"]);
+                    .actor(format!("{} at {position} is speaking.", player.name))
+                    .timer(timer);
             }
         }
 
@@ -809,18 +745,16 @@ impl Text {
             format!("Tied nominees: {nominees_list}")
         };
 
-        let mut builder = TextBuilder::new("Tie Voting").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Tie Voting").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "The following players are tied:\n{nominees_list}\n\
+                builder = builder.description(format!(
+                    "The following players are tied:\n{nominees_list}\n\
                      Votes are cast nominee by nominee.\n\
                      Use `vote <positions>` to record votes.\n\
                      Run `next` to move to the next nominee.",
-                    ))
-                    .commands(&["next", "vote", "warn"]);
+                ))
             }
 
             Some(position) => {
@@ -830,16 +764,12 @@ impl Text {
                     .expect("Player with given position should exist");
 
                 builder = builder
-                    .actor(format!(
-                        "Voting for Player {} at position {position}.",
-                        player.name
-                    ))
-                    .timer(timer)
-                    .commands(&["next", "vote", "warn"]);
+                    .actor(format!("Voting for {} at {position}.", player.name))
+                    .timer(timer);
 
                 if let Some(voters) = votes.get(&position) {
                     builder = builder.result(format!(
-                        "Votes from: {}",
+                        "Votes received: {}",
                         voters
                             .iter()
                             .map(|p| p.value().to_string())
@@ -872,23 +802,18 @@ impl Text {
             format!("Tied nominees: {nominees_list}")
         };
 
-        let mut builder = TextBuilder::new("Final Voting").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Final Voting").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "The following players were in tie voting:\n{nominees_list}\n\
+                builder = builder.description(format!(
+                    "The following players were in tie voting:\n{nominees_list}\n\
                      Record final votes using `vote <positions>` (use 0 if none).\n\
                      Run `next` to move forward without recording votes."
-                    ))
-                    .commands(&["next", "vote", "warn"]);
+                ))
             }
             Some(_) => {
-                builder = builder
-                    .actor("Cast final votes.".to_string())
-                    .timer(timer)
-                    .commands(&["next", "vote", "warn"]);
+                builder = builder.actor("Cast final votes.".to_string()).timer(timer);
 
                 if !final_votes.is_empty() {
                     builder = builder.result(format!(
@@ -925,16 +850,14 @@ impl Text {
             format!("Eliminated: {eliminated_list}")
         };
 
-        let mut builder = TextBuilder::new("Final Speech").subtitle(subtitle);
+        let mut builder = TextBuilder::new("Final Speech").info(&subtitle);
 
         match actor {
             None => {
-                builder = builder
-                    .description(format!(
-                        "The following players have been eliminated:\n{eliminated_list}\n\
+                builder = builder.description(format!(
+                    "The following players have been eliminated:\n{eliminated_list}\n\
                      Run `next` to select an eliminated player and start their final speech."
-                    ))
-                    .commands(&["next", "warn"]);
+                ))
             }
             Some(position) => {
                 let player = players
@@ -944,11 +867,10 @@ impl Text {
 
                 builder = builder
                     .actor(format!(
-                        "Player {} at position {position} is giving their final speech",
+                        "{} at {position} is giving their final speech",
                         player.name
                     ))
-                    .timer(timer)
-                    .commands(&["next", "warn"]);
+                    .timer(timer);
             }
         }
 

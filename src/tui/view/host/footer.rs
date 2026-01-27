@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
 pub struct Footer {
-    pub commands: String, // list of host commands
+    pub info: String, // list of host commands
 }
 
 impl Footer {
-    pub fn new(commands: &[String]) -> Self {
+    pub fn new(info: &str) -> Self {
         Self {
-            commands: commands.join(" | "),
+            info: info.to_string(),
         }
     }
 }

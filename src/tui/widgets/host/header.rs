@@ -19,15 +19,6 @@ pub fn draw(
     let in_players = format!("In: {}", view.in_players);
     let out_players = format!("Out: {}", view.out_players);
 
-    let line2 = Line::from(
-        view.activity_info
-            .clone()
-            .expect("second line of header should exist"),
-    )
-    .alignment(Alignment::Center)
-    .add_modifier(Modifier::ITALIC)
-    .add_modifier(Modifier::DIM);
-
     frame.render_widget(
         Line::from(in_players)
             .alignment(Alignment::Left)
@@ -49,7 +40,6 @@ pub fn draw(
             .add_modifier(Modifier::DIM),
         layout.right,
     );
-    frame.render_widget(line2, layout.s_line);
 
     Ok(())
 }

@@ -34,8 +34,8 @@ impl Host {
         // Split vertically: header/body/footer
         let rects = Layout::vertical([
             Constraint::Length(1), // empty line
-            Constraint::Length(2), // header
-            Constraint::Min(6),    // main
+            Constraint::Length(1), // header
+            Constraint::Min(9),    // main
             Constraint::Length(1), // footer
             Constraint::Length(1), // empty line
         ])

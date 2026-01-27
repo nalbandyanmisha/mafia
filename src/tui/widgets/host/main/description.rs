@@ -1,6 +1,7 @@
 use ratatui::{
     Frame,
     layout::Alignment,
+    style::{Color, Stylize},
     text::Text,
     widgets::{Paragraph, Wrap},
 };
@@ -16,6 +17,7 @@ pub fn draw(
     let centered = centered_area(layout.area, text.height() as u16);
     frame.render_widget(
         Paragraph::new(text.to_string())
+            .fg(Color::White)
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true }),
         centered,

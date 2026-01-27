@@ -11,7 +11,7 @@ pub fn draw(
     layout: &layout::host::Footer,
     view: &view::host::Footer,
 ) -> anyhow::Result<()> {
-    let paragraph = Paragraph::new(view.commands.clone())
+    let paragraph = Paragraph::new(view.info.clone())
         .alignment(Alignment::Center)
         .add_modifier(Modifier::ITALIC);
 

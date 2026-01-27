@@ -1,11 +1,6 @@
-use ratatui::{
-    Frame,
-    layout::Alignment,
-    text::Text,
-    widgets::{Paragraph, Wrap},
-};
+use ratatui::{Frame, layout::Alignment, text::Text};
 
-use crate::tui::{layout, util::centered_area, view};
+use crate::tui::{layout, view};
 
 pub fn draw(
     frame: &mut Frame,
@@ -17,36 +12,45 @@ pub fn draw(
         text::{Line, Span},
     };
 
-    let mut lines: Vec<Line> = view.actor.lines().map(Line::from).collect();
+    frame.render_widget(
+        view.actor
+            .lines()
+            .map(Line::from)
+            .collect::<Text>()
+            .fg(Color::White)
+            .alignment(Alignment::Center),
+        layout.player,
+    );
 
     if let Some(sec) = view.timer {
         let style = if sec <= 10 {
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
-                .fg(Color::Yellow)
+                .fg(Color::White)
                 .add_modifier(Modifier::BOLD)
         };
 
-        lines.push(Line::from(Span::styled(
-            format!("⏳ {:02}:{:02}", sec / 60, sec % 60),
-            style,
-        )));
+        frame.render_widget(
+            Line::from(Span::styled(
+                format!("⏳ {:02}:{:02}", sec / 60, sec % 60),
+                style,
+            ))
+            .alignment(Alignment::Center),
+            layout.timer,
+        );
     }
 
     if let Some(r) = &view.result {
-        lines.extend(r.lines().map(Line::from));
+        frame.render_widget(
+            r.lines()
+                .map(Line::from)
+                .collect::<Text>()
+                .fg(Color::White)
+                .alignment(Alignment::Center),
+            layout.result,
+        );
     }
-
-    let text = Text::from(lines);
-    let centered = centered_area(layout.area, text.height() as u16);
-
-    frame.render_widget(
-        Paragraph::new(text)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: true }),
-        centered,
-    );
 
     Ok(())
 }

@@ -22,7 +22,7 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, view: &view::HostView) -> an
     );
 
     header::draw(frame, &host.header, &view.header)?;
-    main::draw(frame, &host.body, &view.main)?;
+    main::draw(frame, &host.body, &view.body)?;
     footer::draw(frame, &host.footer, &view.footer)?;
     Ok(())
 }
