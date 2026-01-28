@@ -14,6 +14,7 @@ pub struct Player {
     pub position: Option<Position>,
     pub role: Option<Role>,
     pub is_silenced: bool,
+    pub shots: Option<HashMap<usize, Position>>,
     pub warnings: u8,
     pub status: Status,
 }

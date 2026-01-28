@@ -348,6 +348,22 @@ impl Game {
         Ok(events.into_iter().map(Event::Check).collect())
     }
 
+    pub fn record_shoot(
+        &mut self,
+        day: DayIndex,
+        shooter: Position,
+        target: Position,
+    ) -> Result<Vec<Event>, Error> {
+        let player = self
+            .players
+            .iter_mut()
+            .find(|p| p.position() == Some(shooter))
+            .ok_or(Error::PlayerByPositionNotFound(shooter))?;
+
+        let events = player.record_shot(day, target)?;
+        Ok(events.into_iter().map(Event::Player).collect())
+    }
+
     pub fn record_mafia_kill(
         &mut self,
         day: DayIndex,

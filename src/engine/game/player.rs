@@ -1,6 +1,8 @@
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt;
 
+use crate::domain::DayIndex;
 use crate::domain::{position::Position, role::Role, status::Status};
 use crate::snapshot::{self, Snapshot};
 
@@ -15,6 +17,7 @@ pub struct Player {
     name: String,
     role: Option<Role>,
     position: Option<Position>,
+    shots: Option<HashMap<DayIndex, Position>>,
     warnings: u8,
     penalty: Penalty,
     status: Status,
@@ -62,6 +65,12 @@ pub enum Event {
         name: String,
         position: Position,
         total: u8,
+    },
+
+    Shooted {
+        name: String,
+        position: Position,
+        target: Position,
     },
 
     Silenced {
@@ -140,6 +149,17 @@ impl fmt::Display for Event {
                     "Player {name} at position {position} was pardoned, currently has {total}"
                 )
             }
+
+            Event::Shooted {
+                name,
+                position,
+                target,
+            } => {
+                write!(
+                    f,
+                    "Player {name} at position {position} shooted at position {target}"
+                )
+            }
             Event::Silenced { name, position } => {
                 write!(f, "Player {name} at position {position} is Silenced")
             }
@@ -170,6 +190,14 @@ impl Snapshot for Player {
             name: self.name.to_string(),
             position: self.position,
             role: self.role,
+            shots: self.shots.is_some().then(|| {
+                self.shots
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|(day, target)| (day.current(), *target))
+                    .collect()
+            }),
             warnings: self.warnings,
             is_silenced: self.penalty.silenced,
             status: self.status,
@@ -183,6 +211,7 @@ impl Default for Player {
             name: String::new(),
             role: None,
             position: None,
+            shots: None,
             warnings: 0,
             penalty: Penalty::default(),
             status: Status::Alive,
@@ -197,6 +226,18 @@ impl Player {
             name,
             ..Default::default()
         }
+    }
+
+    pub fn record_shot(&mut self, day: DayIndex, target: Position) -> Result<Vec<Event>, Error> {
+        if let Some(shots) = &mut self.shots {
+            shots.insert(day, target);
+        }
+
+        Ok(vec![Event::Shooted {
+            name: self.name.clone(),
+            position: self.position.unwrap(),
+            target,
+        }])
     }
 
     pub fn assign_position(&mut self, position: Position) -> Result<Vec<Event>, Error> {
@@ -228,6 +269,9 @@ impl Player {
             return Err(Error::HasRole);
         }
         self.role = Some(role);
+        if self.is_mafia() {
+            self.shots = Some(HashMap::new());
+        }
         Ok(vec![Event::RoleAssigned {
             name: self.name.clone(),
             position: self.position.unwrap(),
@@ -355,6 +399,12 @@ impl Player {
     pub fn position(&self) -> Option<Position> {
         self.position
     }
+
+    pub fn shot(&self, day: DayIndex) -> Option<Position> {
+        self.shots
+            .as_ref()
+            .and_then(|shots| shots.get(&day).copied())
+    }
     // pub fn status(&self) -> Status {
     //     self.status
     // }
@@ -366,9 +416,6 @@ impl Player {
     }
 
     // ----------- Queries ----------
-    pub fn has_role(&self) -> bool {
-        self.role.is_some()
-    }
     pub fn is_alive(&self) -> bool {
         self.status == Status::Alive
     }

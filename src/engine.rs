@@ -307,6 +307,15 @@ impl Engine {
 
         if self.game.player_by_position(target).unwrap().is_removed() {
             self.set_phase(Activity::Night(NightActivity::MafiaShooting))?;
+            self.actor.reset(
+                self.game
+                    .players()
+                    .iter()
+                    .find(|p| p.is_mafia() && p.is_alive())
+                    .expect("At least one mafia must be alive")
+                    .position()
+                    .expect("Must have assigned position"),
+            );
             self.day.advance();
         }
         Ok(events)
@@ -326,23 +335,16 @@ impl Engine {
     fn shoot(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
         let mut events = Vec::new();
         self.ensure_alive(target)?;
-        let player = self.game.player_by_position_mut(target).unwrap();
-        events.extend(
-            player
-                .mark_dead()?
-                .into_iter()
-                .map(game::Event::Player)
-                .map(Event::Game)
-                .collect::<Vec<Event>>(),
-        );
-        events.extend(
-            self.game
-                .record_mafia_kill(self.day, target)?
-                .into_iter()
-                .map(Event::Game)
-                .collect::<Vec<Event>>(),
-        );
-        events.extend(self.end()?);
+        if let Some(actor) = self.actor.current() {
+            events.extend(
+                self.game
+                    .record_shoot(self.day, actor, target)?
+                    .into_iter()
+                    .map(Event::Game),
+            );
+        } else {
+            return Err(anyhow::anyhow!("No active shooter"));
+        }
 
         Ok(events)
     }
@@ -572,18 +574,74 @@ impl Engine {
             }
 
             Night(MafiaShooting) => {
-                self.actor.reset(
+                let mut events = Vec::new();
+                self.game.next_actor(&mut self.actor, |pos| {
                     self.game
-                        .sheriff()
-                        .expect("Sheriff should exist")
-                        .position()
-                        .expect("Sheriff must have assigned position"),
-                );
-                self.set_phase(next)?;
-                vec![Event::PhaseAdvanced {
-                    from: current,
-                    to: next,
-                }]
+                        .player_by_position(pos)
+                        .map(|p| p.is_mafia() && p.is_alive())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    let mafia_shots = self
+                        .game
+                        .players()
+                        .iter()
+                        .filter_map(|p| {
+                            if p.is_mafia() && p.is_alive() {
+                                p.shot(self.day)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<Position>>();
+
+                    if mafia_shots.windows(2).all(|w| w[0] == w[1]) {
+                        let target = mafia_shots[0];
+                        let player = self
+                            .game
+                            .player_by_position_mut(target)
+                            .expect("Target player must exist and have assigned position");
+
+                        events.extend(
+                            player
+                                .mark_dead()?
+                                .into_iter()
+                                .map(game::Event::Player)
+                                .map(Event::Game)
+                                .collect::<Vec<Event>>(),
+                        );
+                        events.extend(
+                            self.game
+                                .record_mafia_kill(self.day, target)?
+                                .into_iter()
+                                .map(Event::Game)
+                                .collect::<Vec<Event>>(),
+                        );
+                        events.extend(self.end()?);
+                    }
+                    self.actor.reset(
+                        self.game
+                            .sheriff()
+                            .expect("Sheriff should exist")
+                            .position()
+                            .expect("Sheriff must have assigned position"),
+                    );
+                    self.set_phase(next)?;
+                    events.push(Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    });
+                    events
+                } else {
+                    events.push(Event::ActorAdvanced {
+                        to: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at mafia shooting"),
+                    });
+                    events
+                }
             }
             Night(SheriffCheck) => {
                 self.game.next_actor(&mut self.actor, |pos| {
@@ -751,13 +809,21 @@ impl Engine {
 
                 if self.actor.is_completed() {
                     if next == Night(MafiaShooting) {
+                        self.actor.reset(
+                            self.game
+                                .players()
+                                .iter()
+                                .find(|p| p.is_mafia() && p.is_alive())
+                                .expect("At least one mafia must be alive")
+                                .position()
+                                .expect("Must have assigned position"),
+                        );
                         self.day.advance();
                     }
                     // Todo
                     // First speaker just to pass correct datatype, does not matter value here.
                     // will fix this to avoid missunderstanding
 
-                    let mut first_actor_of_next_phase = Position::new(0);
                     if next == Evening(Voting) {
                         let nominees = self
                             .game
@@ -765,9 +831,8 @@ impl Engine {
                             .get(&self.day)
                             .expect("Voting must exist")
                             .get_nominees();
-                        first_actor_of_next_phase = nominees[0];
+                        self.actor.reset(nominees[0]);
                     }
-                    self.actor.reset(first_actor_of_next_phase);
                     self.set_phase(next)?;
                     events.push(Event::PhaseAdvanced {
                         from: current,
@@ -1009,7 +1074,16 @@ impl Engine {
                     self.actor.reset(nominees[0]);
                     events.extend(self.end()?);
                 } else {
-                    self.actor.reset(Position::new(1));
+                    self.actor.reset(
+                        self.game
+                            .players()
+                            .iter()
+                            .find(|p| p.is_mafia() && p.is_alive())
+                            .expect("At least one mafia must be alive")
+                            .position()
+                            .expect("Must have assigned position"),
+                    );
+
                     self.day.advance();
                 }
 
@@ -1039,6 +1113,15 @@ impl Engine {
                 if self.actor.is_completed() {
                     self.set_phase(next)?;
                     self.day.advance();
+                    self.actor.reset(
+                        self.game
+                            .players()
+                            .iter()
+                            .find(|p| p.is_mafia() && p.is_alive())
+                            .expect("At least one mafia must be alive")
+                            .position()
+                            .expect("Must have assigned position"),
+                    );
                     events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
