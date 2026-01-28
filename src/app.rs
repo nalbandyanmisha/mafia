@@ -9,6 +9,7 @@ use clap::Parser;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -98,109 +99,55 @@ impl App {
 
                 self.timer_task = Some(handle);
             }
-            Join { name } => match self.engine.apply(EngineCommand::Join { name }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
-            Leave { name } => match self.engine.apply(EngineCommand::Leave { name }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Join { name } => {
+                let result = self.engine.apply(EngineCommand::Join { name });
+                self.handle_engine_result(result).await;
+            }
+            Leave { name } => {
+                let result = self.engine.apply(EngineCommand::Leave { name });
+                self.handle_engine_result(result).await;
+            }
 
-            Start => match self.engine.apply(EngineCommand::Start) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Start => {
+                let result = self.engine.apply(EngineCommand::Start);
+                self.handle_engine_result(result).await;
+            }
 
-            Next => match self.engine.apply(EngineCommand::Advance) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Next => {
+                let result = self.engine.apply(EngineCommand::Advance);
+                self.handle_engine_result(result).await;
+            }
 
-            AssignRole => match self.engine.apply(EngineCommand::AssignRole) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            AssignRole => {
+                let results = self.engine.apply(EngineCommand::AssignRole);
+                self.handle_engine_result(results).await;
+            }
 
-            RevokeRole => match self.engine.apply(EngineCommand::RevokeRole) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            RevokeRole => {
+                let results = self.engine.apply(EngineCommand::RevokeRole);
+                self.handle_engine_result(results).await;
+            }
 
-            Warn { position } => match self.engine.apply(EngineCommand::Warn {
-                target: position.into(),
-            }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Warn { position } => {
+                let results = self.engine.apply(EngineCommand::Warn {
+                    target: position.into(),
+                });
+                self.handle_engine_result(results).await;
+            }
 
-            Pardon { position } => match self.engine.apply(EngineCommand::Pardon {
-                target: position.into(),
-            }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Pardon { position } => {
+                let results = self.engine.apply(EngineCommand::Pardon {
+                    target: position.into(),
+                });
+                self.handle_engine_result(results).await;
+            }
 
-            Nominate { position } => match self.engine.apply(EngineCommand::Nominate {
-                target: position.into(),
-            }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Nominate { position } => {
+                let results = self.engine.apply(EngineCommand::Nominate {
+                    target: position.into(),
+                });
+                self.handle_engine_result(results).await;
+            }
 
             Vote { positions } => {
                 let mut targets = Vec::new();
@@ -220,31 +167,19 @@ impl App {
                 }
             }
 
-            Shoot { position } => match self.engine.apply(EngineCommand::Shoot {
-                target: position.into(),
-            }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Shoot { position } => {
+                let results = self.engine.apply(EngineCommand::Shoot {
+                    target: position.into(),
+                });
+                self.handle_engine_result(results).await;
+            }
 
-            Check { position } => match self.engine.apply(EngineCommand::Check {
-                target: position.into(),
-            }) {
-                Ok(events) => {
-                    for event in events {
-                        let _ = self.event_tx.send(AppEvent::Engine(event)).await;
-                    }
-                }
-                Err(err) => {
-                    let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
-                }
-            },
+            Check { position } => {
+                let results = self.engine.apply(EngineCommand::Check {
+                    target: position.into(),
+                });
+                self.handle_engine_result(results).await;
+            }
 
             Guess { targets } => {
                 let mut positions = Vec::new();
@@ -315,5 +250,79 @@ impl App {
         }
 
         self.input.clear();
+    }
+
+    async fn start_timer(&mut self, seconds: u64) {
+        // stop previous timer if any
+        if let Some(task) = self.timer_task.take() {
+            task.abort();
+        }
+
+        let tx = self.event_tx.clone();
+
+        let handle = tokio::spawn(async move {
+            let _ = tx.send(AppEvent::TimerStarted(seconds)).await;
+
+            for remaining in (0..seconds).rev() {
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                let _ = tx.send(AppEvent::TimerTick(remaining)).await;
+            }
+
+            let _ = tx.send(AppEvent::TimerEnded).await;
+        });
+
+        self.current_timer = Some(seconds);
+        self.timer_task = Some(handle);
+    }
+
+    async fn handle_engine_result(&mut self, result: anyhow::Result<Vec<crate::engine::Event>>) {
+        match result {
+            Ok(events) => {
+                for event in events {
+                    // forward event
+                    let _ = self.event_tx.send(AppEvent::Engine(event.clone())).await;
+
+                    // AUTO TIMER HOOK
+                    if let crate::engine::Event::ActorAdvanced { .. } = event {
+                        if let Some(seconds) = timer_for_engine(&self.engine) {
+                            self.start_timer(seconds).await;
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                let _ = self.event_tx.send(AppEvent::Error(err.to_string())).await;
+            }
+        }
+    }
+}
+
+fn timer_for_engine(engine: &Engine) -> Option<u64> {
+    use crate::domain::EngineState::Game;
+    use crate::domain::{
+        Activity::*, EveningActivity::*, MorningActivity::*, NightActivity::*, NoonActivity::*,
+    };
+
+    match engine.state {
+        Game(Night(RoleAssignment)) => None,
+        Game(Night(SheriffReveal)) => Some(5),
+        Game(Night(DonReveal)) => Some(5),
+        Game(Night(MafiaBriefing)) => Some(60),
+        Game(Night(MafiaShooting)) => None,
+        Game(Night(SheriffCheck)) => Some(10),
+        Game(Night(DonCheck)) => Some(10),
+
+        Game(Morning(Guessing)) => Some(15),
+        Game(Morning(DeathSpeech)) => Some(60),
+
+        Game(Noon(Discussion)) => Some(60),
+
+        Game(Evening(Voting)) => Some(2),
+        Game(Evening(TieDiscussion)) => Some(30),
+        Game(Evening(TieVoting)) => Some(2),
+        Game(Evening(FinalVoting)) => Some(2),
+        Game(Evening(FinalSpeech)) => Some(60),
+
+        _ => None,
     }
 }

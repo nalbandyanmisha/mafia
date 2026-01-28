@@ -655,6 +655,7 @@ impl Engine {
 
             // -------- Day --------
             Noon(Discussion) => {
+                let mut events = Vec::new();
                 let previous_actor = self.actor.current();
 
                 if let Some(previous_actor) = previous_actor {
@@ -674,6 +675,10 @@ impl Engine {
                         .map(|p| p.is_alive())
                         .unwrap_or(false)
                 });
+
+                if let Some(pos) = self.actor.current() {
+                    events.push(Event::ActorAdvanced { to: pos });
+                }
 
                 if self.actor.is_completed() {
                     if next == Night(MafiaShooting) {
@@ -695,12 +700,13 @@ impl Engine {
                     }
                     self.actor.reset(first_actor_of_next_phase);
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
-                    }]
+                    });
+                    events
                 } else {
-                    vec![]
+                    events
                 }
             }
 
@@ -758,6 +764,9 @@ impl Engine {
                     .get(&self.day)
                     .expect("Voting must exist");
                 voting.next_actor(&mut self.actor, |_| true);
+                if let Some(pos) = self.actor.current() {
+                    events.push(Event::ActorAdvanced { to: pos });
+                }
 
                 if self.actor.is_completed() {
                     let winners = voting.winners();
@@ -790,15 +799,17 @@ impl Engine {
                         self.actor.reset(tie_nominees[0]);
                         self.set_phase(self.next(current))?;
                     }
-                    vec![Event::PhaseAdvanced {
+                    events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
-                    }]
+                    });
+                    events
                 } else {
-                    vec![]
+                    events
                 }
             }
             Evening(TieDiscussion) => {
+                let mut events = Vec::new();
                 let voting = self
                     .game
                     .tie_voting()
@@ -807,15 +818,20 @@ impl Engine {
 
                 voting.next_actor(&mut self.actor, |_| true);
 
+                if let Some(pos) = self.actor.current() {
+                    events.push(Event::ActorAdvanced { to: pos });
+                }
+
                 if self.actor.is_completed() {
                     self.actor.reset(voting.get_nominees()[0]);
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
-                    }]
+                    });
+                    events
                 } else {
-                    vec![]
+                    events
                 }
             }
             Evening(TieVoting) => {
@@ -866,6 +882,10 @@ impl Engine {
                     .expect("Voting must exist");
                 voting.next_actor(&mut self.actor, |_| true);
 
+                if let Some(pos) = self.actor.current() {
+                    events.push(Event::ActorAdvanced { to: pos });
+                }
+
                 if self.actor.is_completed() {
                     let winners = voting.winners();
 
@@ -881,12 +901,13 @@ impl Engine {
                         self.set_phase(next)?;
                     }
 
-                    vec![Event::PhaseAdvanced {
+                    events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
-                    }]
+                    });
+                    events
                 } else {
-                    vec![]
+                    events
                 }
             }
             Evening(FinalVoting) => {
@@ -926,6 +947,7 @@ impl Engine {
                 }]
             }
             Evening(FinalSpeech) => {
+                let mut events = Vec::new();
                 let eliminated = self
                     .game
                     .get_eliminated(self.day)
@@ -936,16 +958,20 @@ impl Engine {
                         .map(|p| p.is_eliminated() && eliminated.contains(&pos))
                         .unwrap_or(false)
                 });
+                if let Some(pos) = self.actor.current() {
+                    events.push(Event::ActorAdvanced { to: pos });
+                }
 
                 if self.actor.is_completed() {
                     self.set_phase(next)?;
                     self.day.advance();
-                    vec![Event::PhaseAdvanced {
+                    events.push(Event::PhaseAdvanced {
                         from: current,
                         to: next,
-                    }]
+                    });
+                    events
                 } else {
-                    vec![]
+                    events
                 }
             }
         };
@@ -1126,74 +1152,12 @@ impl Engine {
         }
     }
 
-    // pub fn ensure_don_check(&self, position: Position) -> Result<()> {
-    //     match self.phase()? {
-    //         Activity::Night(NightActivity::DonCheck) => {
-    //             let by = self.game.don();
-    //             if by.unwrap().position().unwrap() != position {
-    //                 bail!("Player {position:?} is not Don");
-    //             }
-    //             Ok(())
-    //         }
-    //         other => bail!("Engine is not in Don Check phase, got {other:?}"),
-    //     }
-    // }
-    //
-    // pub fn ensure_sheriff_check(&self, position: Position) -> Result<()> {
-    //     match self.phase()? {
-    //         Activity::Night(NightActivity::SheriffCheck) => {
-    //             let by = self.game.sheriff();
-    //             if by.unwrap().position().unwrap() != position {
-    //                 bail!("Player {position:?} is not Sheriff");
-    //             }
-    //             Ok(())
-    //         }
-    //         other => bail!("Engine is not in Sheriff Check phase, got {other:?}"),
-    //     }
-    // }
-
     pub fn ensure_discussion(&self) -> Result<()> {
         match &self.phase()? {
             Activity::Noon(NoonActivity::Discussion) => Ok(()),
             other => bail!("Engine is not in Discussion phase, got {other:?}"),
         }
     }
-
-    // pub fn ensure_night(&self) -> Result<()> {
-    //     match &self.phase()? {
-    //         Activity::Night(_) => Ok(()),
-    //         other => bail!("Engine is not in Night phase, got {other:?}"),
-    //     }
-    // }
-    //
-    // pub fn ensure_morning(&self) -> Result<()> {
-    //     match &self.phase()? {
-    //         Activity::Morning(_) => Ok(()),
-    //         other => bail!("Engine is not in Morning phase, got {other:?}"),
-    //     }
-    // }
-    //
-    // pub fn ensure_noon(&self) -> Result<()> {
-    //     match &self.phase()? {
-    //         Activity::Noon(_) => Ok(()),
-    //         other => bail!("Engine is not in Noon phase, got {other:?}"),
-    //     }
-    // }
-    //
-    // pub fn ensure_evening(&self) -> Result<()> {
-    //     match &self.phase()?.daytime() {
-    //         Day::Evening => Ok(()),
-    //         other => bail!("Engine is not in Voting phase, got {other:?}"),
-    //     }
-    // }
-    //
-    // fn ensure_phase(&self, expected: Day) -> Result<()> {
-    //     let phase = self.phase()?;
-    //     if phase.daytime() != expected {
-    //         bail!("Wrong phase. Expected {expected:?}, got {phase:?}");
-    //     }
-    //     Ok(())
-    // }
 
     fn ensure_alive(&self, position: Position) -> Result<()> {
         let player = self
