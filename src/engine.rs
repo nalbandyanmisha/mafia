@@ -49,6 +49,7 @@ pub enum Error {
 pub enum Event {
     // lifecycle
     GameStarted,
+    GameEnded,
     PhaseAdvanced { from: Activity, to: Activity },
 
     // actor
@@ -63,6 +64,9 @@ impl fmt::Display for Event {
         match self {
             Event::GameStarted => {
                 write!(f, "Game has started")
+            }
+            Event::GameEnded => {
+                write!(f, "Game has ended")
             }
             Event::PhaseAdvanced { from, to } => {
                 write!(f, "Game phase advanced from  {from} to {to}")
@@ -103,6 +107,7 @@ impl Engine {
             state: EngineState::Lobby(LobbyStatus::Waiting),
         }
     }
+
     pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
         match cmd {
             Command::Join { name } => self.join(&name),
@@ -219,6 +224,31 @@ impl Engine {
         Ok(vec![Event::GameStarted])
     }
 
+    fn end(&mut self) -> Result<Vec<Event>> {
+        let mut events = Vec::new();
+        let mafia = self.game.players().iter().fold(0, |count, p| {
+            if p.is_mafia() && p.is_alive() {
+                count + 1
+            } else {
+                count
+            }
+        });
+        let citizens = self.game.players().iter().fold(0, |count, p| {
+            if !p.is_mafia() && p.is_alive() {
+                count + 1
+            } else {
+                count
+            }
+        });
+
+        if mafia == 0 || mafia >= citizens {
+            events.push(Event::GameEnded);
+        } else {
+            return Ok(events);
+        }
+        Ok(events)
+    }
+
     fn assign_role(&mut self, position: Position) -> Result<Vec<Event>> {
         self.ensure_role_assignment()?;
 
@@ -260,23 +290,26 @@ impl Engine {
     // ------------------------------
 
     fn warn(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events = Vec::new();
         self.ensure_alive(target)?;
+        events.extend(self.end()?);
 
-        let events = self
-            .game
-            .player_by_position_mut(target)
-            .ok_or(Error::Game(game::Error::PlayerByPositionNotFound(target)))?
-            .warn()?; // returns Vec<player::Event>
+        events.extend(
+            self.game
+                .player_by_position_mut(target)
+                .ok_or(Error::Game(game::Error::PlayerByPositionNotFound(target)))?
+                .warn()?
+                .into_iter()
+                .map(game::Event::Player)
+                .map(Event::Game)
+                .collect::<Vec<Event>>(),
+        ); // returns Vec<player::Event>
 
         if self.game.player_by_position(target).unwrap().is_removed() {
             self.set_phase(Activity::Night(NightActivity::MafiaShooting))?;
             self.day.advance();
         }
-        Ok(events
-            .into_iter()
-            .map(game::Event::Player)
-            .map(Event::Game)
-            .collect())
+        Ok(events)
     }
 
     fn pardon(&mut self, target: Position) -> Result<Vec<Event>> {
@@ -291,15 +324,27 @@ impl Engine {
     }
 
     fn shoot(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events = Vec::new();
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
-        let events = player.mark_dead()?;
-        self.game.record_mafia_kill(self.day, target)?;
-        Ok(events
-            .into_iter()
-            .map(game::Event::Player)
-            .map(Event::Game)
-            .collect())
+        events.extend(
+            player
+                .mark_dead()?
+                .into_iter()
+                .map(game::Event::Player)
+                .map(Event::Game)
+                .collect::<Vec<Event>>(),
+        );
+        events.extend(
+            self.game
+                .record_mafia_kill(self.day, target)?
+                .into_iter()
+                .map(Event::Game)
+                .collect::<Vec<Event>>(),
+        );
+        events.extend(self.end()?);
+
+        Ok(events)
     }
 
     fn check(&mut self, target: Position) -> Result<Vec<Event>> {
@@ -785,6 +830,7 @@ impl Engine {
                             .mark_eliminated()?;
                         self.actor.reset(winners[0]);
                         self.set_phase(self.next(current))?;
+                        events.extend(self.end()?);
                     } else {
                         self.game.tie_voting_mut().insert(
                             self.day,
@@ -897,6 +943,7 @@ impl Engine {
                             .mark_eliminated()?;
                         self.actor.reset(winners[0]);
                         self.set_phase(next)?;
+                        events.extend(self.end()?);
                     } else {
                         self.set_phase(next)?;
                     }
@@ -911,6 +958,7 @@ impl Engine {
                 }
             }
             Evening(FinalVoting) => {
+                let mut events = Vec::new();
                 let yes_count = self
                     .game
                     .final_voting()
@@ -935,16 +983,18 @@ impl Engine {
                             .mark_eliminated()?;
                     }
                     self.actor.reset(nominees[0]);
+                    events.extend(self.end()?);
                 } else {
                     self.actor.reset(Position::new(1));
                     self.day.advance();
                 }
 
                 self.set_phase(next)?;
-                vec![Event::PhaseAdvanced {
+                events.push(Event::PhaseAdvanced {
                     from: current,
                     to: next,
-                }]
+                });
+                events
             }
             Evening(FinalSpeech) => {
                 let mut events = Vec::new();

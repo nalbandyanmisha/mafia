@@ -1,0 +1,1126 @@
+{
+  "engine": {
+    "game": {
+      "players": [
+        {
+          "name": "g",
+          "position": 1,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "i",
+          "position": 2,
+          "role": "Mafia",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Eliminated"
+        },
+        {
+          "name": "b",
+          "position": 3,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "j",
+          "position": 4,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "e",
+          "position": 5,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "h",
+          "position": 6,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "a",
+          "position": 7,
+          "role": "Mafia",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Dead"
+        },
+        {
+          "name": "d",
+          "position": 8,
+          "role": "Citizen",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        },
+        {
+          "name": "f",
+          "position": 9,
+          "role": "Don",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Dead"
+        },
+        {
+          "name": "c",
+          "position": 10,
+          "role": "Sheriff",
+          "is_silenced": false,
+          "warnings": 0,
+          "status": "Alive"
+        }
+      ],
+      "kill": {
+        "2": 9,
+        "1": 7
+      },
+      "voting": {
+        "0": {
+          "nominations": {
+            "3": 2,
+            "1": 7
+          },
+          "nominees": [
+            7,
+            2
+          ],
+          "votes": {
+            "7": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "2": [
+              7,
+              10,
+              8,
+              9,
+              6
+            ]
+          }
+        },
+        "1": {
+          "nominations": {
+            "3": 2
+          },
+          "nominees": [
+            2
+          ],
+          "votes": {
+            "2": [
+              3,
+              1,
+              10,
+              4,
+              8,
+              2,
+              6,
+              5,
+              9
+            ]
+          }
+        }
+      },
+      "tie_voting": {
+        "0": {
+          "nominations": {},
+          "nominees": [
+            7,
+            2
+          ],
+          "votes": {
+            "2": [
+              9,
+              8,
+              10,
+              6,
+              7
+            ],
+            "7": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        }
+      },
+      "final_voting": {},
+      "check": {},
+      "guess": [],
+      "eliminated": {
+        "1": [
+          2
+        ]
+      }
+    },
+    "phase": {
+      "Night": "MafiaShooting"
+    },
+    "day": 2,
+    "state": {
+      "Game": {
+        "Night": "MafiaShooting"
+      }
+    },
+    "actor": null
+  },
+  "input": "shoot 9",
+  "events": [
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "a"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "b"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "c"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "d"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "e"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "f"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "g"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "h"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "i"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "PlayerJoin": {
+            "name": "j"
+          }
+        }
+      }
+    },
+    {
+      "Engine": "GameStarted"
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 1
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 3
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 4
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 5
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 6
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 8
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 9
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 10
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "RoleAssignment"
+          },
+          "to": {
+            "Night": "SheriffReveal"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 10
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "SheriffReveal"
+          },
+          "to": {
+            "Night": "DonReveal"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 9
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "DonReveal"
+          },
+          "to": {
+            "Night": "MafiaBriefing"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "MafiaBriefing"
+          },
+          "to": {
+            "Noon": "Discussion"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 1
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Nominated": {
+              "nominator": 1,
+              "nominee": 7
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 3
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Nominated": {
+              "nominator": 3,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 4
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 5
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 6
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 8
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 9
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 10
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Noon": "Discussion"
+          },
+          "to": {
+            "Evening": "Voting"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Finalized": {
+              "nominee": 7
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Finalized": {
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 7,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 10,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 8,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 9,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 6,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "Voting"
+          },
+          "to": {
+            "Evening": "TieDiscussion"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "TieDiscussion"
+          },
+          "to": {
+            "Evening": "TieVoting"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Finalized": {
+              "nominee": 7
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Finalized": {
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 9,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 8,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 10,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 6,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 7,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "TieVoting"
+          },
+          "to": {
+            "Evening": "FinalVoting"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "FinalVoting"
+          },
+          "to": {
+            "Night": "MafiaShooting"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Player": {
+            "Died": {
+              "name": "a",
+              "position": 7
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "MafiaKill": {
+            "position": 7
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "MafiaShooting"
+          },
+          "to": {
+            "Night": "SheriffCheck"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 10
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "SheriffCheck"
+          },
+          "to": {
+            "Night": "DonCheck"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 9
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Night": "DonCheck"
+          },
+          "to": {
+            "Morning": "Guessing"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Morning": "Guessing"
+          },
+          "to": {
+            "Morning": "DeathSpeech"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 7
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Morning": "DeathSpeech"
+          },
+          "to": {
+            "Noon": "Discussion"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 3
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Nominated": {
+              "nominator": 3,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 4
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 5
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 6
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 8
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 9
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 10
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 1
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Noon": "Discussion"
+          },
+          "to": {
+            "Evening": "Voting"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Finalized": {
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 3,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 1,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 10,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 4,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 8,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 2,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 6,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 5,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "Game": {
+          "Voting": {
+            "Voted": {
+              "voter": 9,
+              "nominee": 2
+            }
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "Voting"
+          },
+          "to": {
+            "Evening": "TieDiscussion"
+          }
+        }
+      }
+    },
+    {
+      "Engine": {
+        "ActorAdvanced": {
+          "to": 2
+        }
+      }
+    },
+    {
+      "Engine": {
+        "PhaseAdvanced": {
+          "from": {
+            "Evening": "FinalSpeech"
+          },
+          "to": {
+            "Night": "MafiaShooting"
+          }
+        }
+      }
+    }
+  ],
+  "current_timer": null
+}

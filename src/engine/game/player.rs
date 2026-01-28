@@ -382,9 +382,9 @@ impl Player {
         self.status == Status::Eliminated
     }
 
-    // pub fn is_mafia(&self) -> bool {
-    //     matches!(self.role, Some(Role::Don) | Some(Role::Mafia))
-    // }
+    pub fn is_mafia(&self) -> bool {
+        matches!(self.role, Some(Role::Don) | Some(Role::Mafia))
+    }
 
     pub fn is_sheriff(&self) -> bool {
         matches!(self.role, Some(Role::Sheriff))

@@ -5,11 +5,11 @@ pub mod parser;
 use crate::app::{commands::Command as AppCommand, events::Event as AppEvent};
 use crate::engine::{Engine, commands::Command as EngineCommand};
 use crate::snapshot::{self, Snapshot};
+use crate::storage::timestamped_save_path;
 use clap::Parser;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -287,6 +287,30 @@ impl App {
                         if let Some(seconds) = timer_for_engine(&self.engine) {
                             self.start_timer(seconds).await;
                         }
+                    }
+
+                    if let crate::engine::Event::GameEnded = event {
+                        // stop any running timer
+                        if let Some(task) = self.timer_task.take() {
+                            task.abort();
+                        }
+                        self.current_timer = None;
+                        let path = timestamped_save_path();
+
+                        match self.save_to_file(&path) {
+                            Ok(_) => {
+                                let _ = self.event_tx.send(AppEvent::End).await;
+                            }
+                            Err(err) => {
+                                let _ = self
+                                    .event_tx
+                                    .send(AppEvent::Error(format!(
+                                        "Failed to save game to {path:?}: {err}"
+                                    )))
+                                    .await;
+                            }
+                        }
+                        self.engine = Engine::new();
                     }
                 }
             }

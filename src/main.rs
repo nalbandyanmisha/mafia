@@ -2,6 +2,7 @@ mod app;
 mod domain;
 mod engine;
 mod snapshot;
+mod storage;
 mod tui;
 
 use app::{App, AppStatus, events::Event as AppEvent};
