@@ -510,6 +510,14 @@ impl Engine {
                 }
             }
             Night(DonReveal) => {
+                let don = self
+                    .game
+                    .players()
+                    .iter()
+                    .find(|p| p.is_don() && p.is_alive())
+                    .expect("Don must exist")
+                    .position()
+                    .expect("Don must have assigned position");
                 self.game.next_actor(&mut self.actor, |pos| {
                     self.game
                         .player_by_position(pos)
@@ -521,7 +529,7 @@ impl Engine {
                     // Todo
                     // First speaker just to pass correct datatype, does not matter value here.
                     // will fix this to avoid missunderstanding
-                    self.actor.reset(Position::new(1));
+                    self.actor.reset(don);
                     self.set_phase(next)?;
                     vec![Event::PhaseAdvanced {
                         from: current,
@@ -537,14 +545,30 @@ impl Engine {
                 }
             }
             Night(MafiaBriefing) => {
-                let first_speaker_of_discussion = self.compute_first_speaker_of_day();
-                self.actor.reset(first_speaker_of_discussion);
-                self.last_discussion_started = first_speaker_of_discussion;
-                self.set_phase(next)?;
-                vec![Event::PhaseAdvanced {
-                    from: current,
-                    to: next,
-                }]
+                self.game.next_actor(&mut self.actor, |pos| {
+                    self.game
+                        .player_by_position(pos)
+                        .map(|p| p.is_don())
+                        .unwrap_or(false)
+                });
+
+                if self.actor.is_completed() {
+                    let first_speaker_of_discussion = self.compute_first_speaker_of_day();
+                    self.actor.reset(first_speaker_of_discussion);
+                    self.last_discussion_started = first_speaker_of_discussion;
+                    self.set_phase(next)?;
+                    vec![Event::PhaseAdvanced {
+                        from: current,
+                        to: next,
+                    }]
+                } else {
+                    vec![Event::ActorAdvanced {
+                        to: self
+                            .actor
+                            .current()
+                            .expect("Actor must exist at don reveal"),
+                    }]
+                }
             }
 
             Night(MafiaShooting) => {

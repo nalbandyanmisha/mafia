@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-use crate::domain::{Day, Position, Status};
+use crate::domain::{Activity, Day, NightActivity, Position, Role, Status};
 use crate::tui::view::PlayerView;
 
 #[derive(Debug, Clone)]
@@ -36,6 +36,9 @@ impl ChairView {
             .iter()
             .find(|p| p.position == Some(position));
 
+        let phase = app.engine.phase.expect("Phase must exist");
+
+        let mut highlight = false;
         let border_style = match app.engine.phase.unwrap().daytime() {
             Night => Color::Magenta,
             Morning => Color::Cyan,
@@ -75,7 +78,21 @@ impl ChairView {
             }
         };
 
-        let highlight = app.engine.actor == Some(position);
+        // Active actor is always highlighted
+        if app.engine.actor == Some(position) {
+            highlight = true;
+        }
+
+        // Mafia briefing: highlight all mafia
+        let is_mafia_briefing = matches!(phase, Activity::Night(NightActivity::MafiaBriefing));
+
+        if is_mafia_briefing && app.engine.actor.is_some() {
+            if let Some(view) = &player_view {
+                if view.role.expect("Role must exist") == Role::Mafia {
+                    highlight = true;
+                }
+            }
+        }
 
         Self {
             position,
