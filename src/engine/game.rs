@@ -443,8 +443,10 @@ impl Game {
                 let mut events = Vec::new();
                 let voting = self.final_voting.entry(day).or_default();
                 for &voter in voters {
-                    voting.push(voter);
-                    events.push(Event::FinalVoting(voter));
+                    if !voting.contains(&voter) {
+                        voting.push(voter);
+                        events.push(Event::FinalVoting(voter));
+                    }
                 }
                 Ok(events)
             }

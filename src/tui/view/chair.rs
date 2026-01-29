@@ -1,6 +1,6 @@
 use ratatui::style::Color;
 
-use crate::domain::{Activity, Day, NightActivity, Position, Role, Status};
+use crate::domain::{Activity, Day, EveningActivity, NightActivity, Position, Role, Status};
 use crate::tui::view::PlayerView;
 
 #[derive(Debug, Clone)]
@@ -85,10 +85,25 @@ impl ChairView {
 
         // Mafia briefing: highlight all mafia
         let is_mafia_briefing = matches!(phase, Activity::Night(NightActivity::MafiaBriefing));
+        let is_final_voting = matches!(phase, Activity::Evening(EveningActivity::FinalVoting));
 
         if is_mafia_briefing && app.engine.actor.is_some() {
             if let Some(view) = &player_view {
                 if view.role.expect("Role must exist") == Role::Mafia {
+                    highlight = true;
+                }
+            }
+        }
+
+        if is_final_voting {
+            if let Some(view) = &player_view {
+                if app
+                    .engine
+                    .game
+                    .tie_voting
+                    .get(&app.engine.day)
+                    .map_or(false, |voting| voting.nominees.contains(&position))
+                {
                     highlight = true;
                 }
             }
