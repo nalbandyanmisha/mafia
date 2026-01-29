@@ -19,7 +19,7 @@ impl Actor {
             Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(7),
             Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Length(1),

@@ -1,4 +1,10 @@
-use ratatui::{Frame, layout::Alignment, text::Text};
+use ratatui::{
+    Frame,
+    layout::Alignment,
+    style::Style,
+    style::*,
+    text::{Line, Span, Text},
+};
 
 use crate::tui::{layout, view};
 
@@ -7,11 +13,6 @@ pub fn draw(
     layout: &layout::host::main::Actor,
     view: &view::host::main::Actor,
 ) -> anyhow::Result<()> {
-    use ratatui::{
-        style::*,
-        text::{Line, Span},
-    };
-
     frame.render_widget(
         view.actor
             .lines()
@@ -32,11 +33,7 @@ pub fn draw(
         };
 
         frame.render_widget(
-            Line::from(Span::styled(
-                format!("⏳ {:02}:{:02}", sec / 60, sec % 60),
-                style,
-            ))
-            .alignment(Alignment::Center),
+            big_timer_text(sec, style).alignment(Alignment::Center),
             layout.timer,
         );
     }
@@ -53,4 +50,140 @@ pub fn draw(
     }
 
     Ok(())
+}
+
+fn big_timer_text(sec: u64, style: Style) -> Text<'static> {
+    let time = format!("{:02}:{:02}", sec / 60, sec % 60);
+
+    let mut lines = vec![String::new(); 7];
+
+    for ch in time.chars() {
+        let g = glyph(ch);
+        for i in 0..7 {
+            lines[i].push_str(g[i]);
+            lines[i].push_str("  "); // spacing between glyphs
+        }
+    }
+
+    Text::from(
+        lines
+            .into_iter()
+            .map(|line| Line::from(Span::styled(line, style)))
+            .collect::<Vec<_>>(),
+    )
+}
+
+const DIGITS: [[&str; 7]; 10] = [
+    // 0
+    [
+        " ███ ",
+        "█   █",
+        "█   █",
+        "█   █",
+        "█   █",
+        "█   █",
+        " ███ ",
+    ],
+    // 1
+    [
+        "  █  ",
+        " ██  ",
+        "  █  ",
+        "  █  ",
+        "  █  ",
+        "  █  ",
+        " ███ ",
+    ],
+    // 2
+    [
+        " ███ ",
+        "█   █",
+        "    █",
+        " ███ ",
+        "█    ",
+        "█    ",
+        "█████",
+    ],
+    // 3
+    [
+        "████ ",
+        "    █",
+        "    █",
+        " ███ ",
+        "    █",
+        "    █",
+        "████ ",
+    ],
+    // 4
+    [
+        "█   █",
+        "█   █",
+        "█   █",
+        "█████",
+        "    █",
+        "    █",
+        "    █",
+    ],
+    // 5
+    [
+        "█████",
+        "█    ",
+        "█    ",
+        "████ ",
+        "    █",
+        "    █",
+        "████ ",
+    ],
+    // 6
+    [
+        " ███ ",
+        "█    ",
+        "█    ",
+        "████ ",
+        "█   █",
+        "█   █",
+        " ███ ",
+    ],
+    // 7
+    [
+        "█████",
+        "    █",
+        "   █ ",
+        "  █  ",
+        " █   ",
+        " █   ",
+        " █   ",
+    ],
+    // 8
+    [
+        " ███ ",
+        "█   █",
+        "█   █",
+        " ███ ",
+        "█   █",
+        "█   █",
+        " ███ ",
+    ],
+    // 9
+    [
+        " ███ ",
+        "█   █",
+        "█   █",
+        " ████",
+        "    █",
+        "    █",
+        " ███ ",
+    ],
+];
+
+fn glyph(ch: char) -> [&'static str; 7] {
+    match ch {
+        '0'..='9' => DIGITS[ch.to_digit(10).unwrap() as usize],
+        ':' => [
+            "     ", "  █  ", "     ", "     ", "  █  ", "     ", "     ",
+        ],
+        _ => [
+            "     ", "     ", "     ", "     ", "     ", "     ", "     ",
+        ],
+    }
 }
