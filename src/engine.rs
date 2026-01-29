@@ -820,9 +820,6 @@ impl Engine {
                         );
                         self.day.advance();
                     }
-                    // Todo
-                    // First speaker just to pass correct datatype, does not matter value here.
-                    // will fix this to avoid missunderstanding
 
                     if next == Evening(Voting) {
                         let nominees = self

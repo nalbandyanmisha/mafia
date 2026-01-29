@@ -59,7 +59,7 @@ impl App {
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         let snapshot = self.snapshot();
 
-        let json = serde_json::to_string_pretty(&snapshot)?;
+        let json = serde_json::to_string_pretty(&snapshot.engine.game)?;
 
         let mut file = File::create(path)?;
         file.write_all(json.as_bytes())?;

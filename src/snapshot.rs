@@ -44,7 +44,7 @@ pub struct Game {
     pub eliminated: HashMap<usize, Vec<Position>>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct Engine {
     pub game: Game,
     pub phase: Option<Activity>,
@@ -53,7 +53,7 @@ pub struct Engine {
     pub actor: Option<Position>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct App {
     pub engine: Engine,
     pub input: String,
