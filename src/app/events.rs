@@ -1,18 +1,16 @@
-use serde::Serialize;
+use ratatui::crossterm::event::KeyEvent;
 use std::fmt;
 
 use crate::engine::Event as EngineEvent;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum Event {
+    Key(KeyEvent),
     Engine(EngineEvent),
     End,
     TimerStarted(u64),
     TimerTick(u64),
     TimerEnded,
-    InputChar(char),
-    InputBackspace,
-    InputEnter,
     Error(String),
     QuitRequested,
 }
@@ -20,15 +18,13 @@ pub enum Event {
 impl fmt::Display for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Event::Key(key) => write!(f, "Key pressed: {key:?}"),
             Event::Engine(event) => write!(f, "{event}"),
             Event::TimerStarted(s) => write!(f, "Timer started: {s}s"),
             Event::TimerTick(s) => write!(f, "Timer: {s}s"),
             Event::TimerEnded => write!(f, "Timer ended"),
             Event::Error(e) => write!(f, "Error: {e}"),
             Event::QuitRequested => write!(f, "Quit requested"),
-            Event::InputChar(c) => write!(f, "Input: {c}"),
-            Event::InputBackspace => write!(f, "Input: Backspace"),
-            Event::InputEnter => write!(f, "Input: Enter"),
             Event::End => write!(f, "End game"),
         }
     }

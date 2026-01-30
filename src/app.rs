@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod events;
+pub mod input;
 pub mod parser;
 
 use crate::app::{commands::Command as AppCommand, events::Event as AppEvent};
@@ -7,6 +8,8 @@ use crate::engine::{Engine, commands::Command as EngineCommand};
 use crate::snapshot::{self, Snapshot};
 use crate::storage::timestamped_save_path;
 use clap::Parser;
+use input::{InputMode, PopupKind};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -23,9 +26,10 @@ pub struct App {
     pub engine: Engine,
     pub status: AppStatus,
     pub input: String,
+    pub input_mode: InputMode,
 
     pub events: Vec<AppEvent>,
-    pub current_timer: Option<u64>, // <- NEW: store timer
+    pub current_timer: Option<u64>,
     pub event_tx: mpsc::Sender<AppEvent>,
     pub timer_task: Option<JoinHandle<()>>,
 }
@@ -37,6 +41,7 @@ impl Snapshot for App {
         snapshot::App {
             engine: self.engine.snapshot(),
             input: self.input.clone(),
+            input_mode: self.input_mode.clone(),
             current_timer: self.current_timer,
             events: self.events.clone(),
         }
@@ -49,6 +54,7 @@ impl App {
             engine: Engine::new(),
             status: AppStatus::Running,
             input: String::new(),
+            input_mode: InputMode::Normal,
             events: Vec::new(),
             current_timer: None,
             event_tx,
@@ -65,6 +71,239 @@ impl App {
         file.write_all(json.as_bytes())?;
 
         Ok(())
+    }
+
+    pub async fn handle_key(&mut self, key: KeyEvent) {
+        match self.input_mode {
+            InputMode::Normal => self.handle_normal_mode(key).await,
+            InputMode::Command => self.handle_command_mode(key).await,
+            InputMode::Popup { .. } => self.handle_popup_mode(key).await,
+        }
+    }
+
+    async fn handle_popup_mode(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.input.clear();
+            }
+
+            KeyCode::Enter => {
+                let value = self.input.trim().to_string();
+
+                if let InputMode::Popup { kind, .. } = self.input_mode.clone() {
+                    self.execute_popup(kind, value).await;
+                }
+
+                self.input.clear();
+                self.input_mode = InputMode::Normal;
+            }
+
+            KeyCode::Backspace => {
+                self.input.pop();
+            }
+
+            KeyCode::Char(c) => {
+                self.input.push(c);
+            }
+
+            _ => {}
+        }
+    }
+
+    async fn execute_popup(&mut self, kind: PopupKind, value: String) {
+        use PopupKind::*;
+
+        match kind {
+            Join => {
+                if !value.is_empty() {
+                    self.handle_command(AppCommand::Join { name: value }).await;
+                }
+            }
+
+            Leave => {
+                if !value.is_empty() {
+                    self.handle_command(AppCommand::Leave { name: value }).await;
+                }
+            }
+
+            Nominate => {
+                if let Ok(pos) = value.parse::<u8>() {
+                    self.handle_command(AppCommand::Nominate { position: pos })
+                        .await;
+                }
+            }
+
+            Shoot => {
+                if let Ok(pos) = value.parse::<u8>() {
+                    self.handle_command(AppCommand::Shoot { position: pos })
+                        .await;
+                }
+            }
+
+            Check => {
+                if let Ok(pos) = value.parse::<u8>() {
+                    self.handle_command(AppCommand::Check { position: pos })
+                        .await;
+                }
+            }
+
+            Warn => {
+                if let Ok(pos) = value.parse::<u8>() {
+                    self.handle_command(AppCommand::Warn { position: pos })
+                        .await;
+                }
+            }
+
+            Pardon => {
+                if let Ok(pos) = value.parse::<u8>() {
+                    self.handle_command(AppCommand::Pardon { position: pos })
+                        .await;
+                }
+            }
+
+            Guess => {
+                let positions: Vec<u8> = value
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<u8>().ok())
+                    .collect();
+
+                if !positions.is_empty() {
+                    self.handle_command(AppCommand::Guess { targets: positions })
+                        .await;
+                }
+            }
+
+            Vote => {
+                let positions: Vec<u8> = value
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<u8>().ok())
+                    .collect();
+
+                if !positions.is_empty() {
+                    self.handle_command(AppCommand::Vote { positions }).await;
+                }
+            }
+        }
+    }
+
+    async fn handle_normal_mode(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char(':') => {
+                self.input_mode = InputMode::Command;
+                self.input.clear();
+            }
+
+            KeyCode::Char('j') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player name".to_string(),
+                    kind: PopupKind::Join,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('l') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player name".to_string(),
+                    kind: PopupKind::Leave,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('n') => {
+                self.handle_command(AppCommand::Next).await;
+            }
+
+            KeyCode::Char('b') => {
+                self.handle_command(AppCommand::Start).await;
+            }
+
+            KeyCode::Char('w') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player position to warn".to_string(),
+                    kind: PopupKind::Warn,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('p') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player position to pardon".to_string(),
+                    kind: PopupKind::Pardon,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('o') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player position to record nomination".to_string(),
+                    kind: PopupKind::Nominate,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('c') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player position to perform check".to_string(),
+                    kind: PopupKind::Check,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('g') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player positions to record guess".to_string(),
+                    kind: PopupKind::Guess,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('v') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player positions to record votes".to_string(),
+                    kind: PopupKind::Vote,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('s') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Enter player position to record shoot".to_string(),
+                    kind: PopupKind::Shoot,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Esc => {
+                self.status = AppStatus::Quit;
+            }
+
+            _ => {}
+        }
+    }
+
+    async fn handle_command_mode(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.input.clear();
+            }
+
+            KeyCode::Enter => {
+                self.parse_input().await;
+                self.input_mode = InputMode::Normal;
+            }
+
+            KeyCode::Backspace => {
+                self.input.pop();
+            }
+
+            KeyCode::Char(c) => {
+                self.input.push(c);
+            }
+
+            _ => {}
+        }
     }
 
     pub async fn handle_command(&mut self, cmd: AppCommand) {
