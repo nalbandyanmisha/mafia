@@ -43,7 +43,7 @@ pub fn draw(
             r.lines()
                 .map(Line::from)
                 .collect::<Text>()
-                .fg(Color::White)
+                .fg(Color::Green)
                 .alignment(Alignment::Center),
             layout.result,
         );
