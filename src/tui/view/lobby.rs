@@ -1,5 +1,4 @@
 use crate::{
-    app::input::InputMode,
     domain::{EngineState, LobbyStatus},
     snapshot,
 };
@@ -12,8 +11,6 @@ pub struct LobbyView {
     pub max_players: u8,
     pub available_positions: Vec<u8>,
     pub ready: bool,
-    pub input: String,
-    pub input_mode: InputMode,
 }
 
 #[derive(Debug, Clone)]
@@ -62,8 +59,6 @@ impl LobbyView {
             max_players: MAX_PLAYERS,
             available_positions,
             ready,
-            input: app.input.clone(),
-            input_mode: app.input_mode.clone(),
         }
     }
 }

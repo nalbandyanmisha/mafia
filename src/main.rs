@@ -45,8 +45,8 @@ async fn main() -> anyhow::Result<()> {
                         match event {
                             AppEvent::QuitRequested => app.status = AppStatus::Quit,
                             AppEvent::Key(key) => {
-            app.handle_key(key).await;
-        }
+                                app.handle_key(key).await;
+                            }
                             AppEvent::Engine(event) => {
                                 app.events.push(AppEvent::Engine(event));
                                 if app.events.len() > 100 {
