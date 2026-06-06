@@ -26,7 +26,9 @@ async fn main() -> anyhow::Result<()> {
         loop {
             if event::poll(Duration::from_millis(50)).unwrap() {
                 if let Event::Key(key) = event::read().unwrap() {
-                    let _ = input_tx.send(AppEvent::Key(key)).await;
+                    if key.kind == event::KeyEventKind::Press {
+                        let _ = input_tx.send(AppEvent::Key(key)).await;
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

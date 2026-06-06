@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
     layout::Alignment,
     style::Color,
-    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
 };
 
 pub fn draw(frame: &mut Frame, host: &layout::Host, view: &view::HostView) -> anyhow::Result<()> {
@@ -29,8 +29,14 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, view: &view::HostView) -> an
     main::draw(frame, &host.body, &view.body)?;
     footer::draw(frame, &host.footer, &view.footer)?;
 
-    if let InputMode::Popup { title, kind: _ } = &view.input_mode {
-        let area = centered_area(host.area, 3);
+    if let InputMode::Popup { title, kind } = &view.input_mode {
+        let (content, area, alignment) = match kind {
+            _ => {
+                let popup_area = centered_area(host.area, 3);
+                (view.input.as_str(), popup_area, Alignment::Center)
+            }
+        };
+
         frame.render_widget(Clear, area);
 
         let popup_block = Block::default()
@@ -39,9 +45,10 @@ pub fn draw(frame: &mut Frame, host: &layout::Host, view: &view::HostView) -> an
             .border_style(Color::White)
             .border_type(BorderType::Thick);
 
-        let paragraph = Paragraph::new(view.input.as_str())
+        let paragraph = Paragraph::new(content)
             .block(popup_block)
-            .alignment(Alignment::Center);
+            .alignment(alignment)
+            .wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);
     }
