@@ -1,6 +1,9 @@
 use crate::tui::util::centered_area;
 use crate::tui::view::LobbyView;
-use crate::{app::input::InputMode, tui::layout};
+use crate::{
+    app::input::InputMode,
+    tui::layout,
+};
 use ratatui::style::Color;
 use ratatui::widgets::{BorderType, Clear};
 use ratatui::{
@@ -8,7 +11,7 @@ use ratatui::{
     layout::Alignment,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 
 pub fn draw(
@@ -88,8 +91,14 @@ pub fn draw(
 
     frame.render_widget(footer, lobby_area.footer);
 
-    if let InputMode::Popup { title, kind: _ } = &view.input_mode {
-        let area = centered_area(lobby_area.panel, 3);
+    if let InputMode::Popup { title, kind } = &view.input_mode {
+        let (content, area, alignment) = match kind {
+            _ => {
+                let popup_area = centered_area(lobby_area.panel, 3);
+                (view.input.as_str(), popup_area, Alignment::Center)
+            }
+        };
+
         frame.render_widget(Clear, area);
 
         let popup_block = Block::default()
@@ -98,9 +107,10 @@ pub fn draw(
             .border_style(Color::White)
             .border_type(BorderType::Thick);
 
-        let paragraph = Paragraph::new(view.input.as_str())
+        let paragraph = Paragraph::new(content)
             .block(popup_block)
-            .alignment(Alignment::Center);
+            .alignment(alignment)
+            .wrap(Wrap { trim: false });
 
         frame.render_widget(paragraph, area);
     }

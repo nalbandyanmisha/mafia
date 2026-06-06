@@ -81,6 +81,56 @@ next
 
 --- 
 
+## Running the application
+
+```bash
+cargo run
+```
+
+The application will start in the terminal with a TUI interface.
+
+---
+
+## Key bindings
+
+### Normal mode
+
+| Key | Action |
+|-----|--------|
+| `:` | Enter command mode |
+| `j` | Join player (opens popup) |
+| `l` | Leave player (opens popup) |
+| `n` | Next phase |
+| `b` | Start game |
+| `w` | Warn player (opens popup) |
+| `p` | Pardon player (opens popup) |
+| `o` | Nominate player (opens popup) |
+| `c` | Check player (opens popup) |
+| `g` | Guess targets (opens popup) |
+| `v` | Vote (opens popup) |
+| `s` | Shoot player (opens popup) |
+| `h` | Show help dialog |
+| `Esc` | Quit game |
+
+### Command mode
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Execute typed command |
+| `Esc` | Return to normal mode |
+| `Backspace` | Delete last character |
+
+### Popup mode
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Confirm popup action |
+| `Esc` | Close popup without applying |
+| `Backspace` | Delete last character |
+| Any character | Type input |
+
+---
+
 ## Project structure
 ├── engine/     # Core game logic, state, commands, phases
 ├── tui/        # Terminal UI (layout, widgets, input)

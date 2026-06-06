@@ -184,6 +184,8 @@ impl App {
                     self.handle_command(AppCommand::Vote { positions }).await;
                 }
             }
+
+            Help => {}
         }
     }
 
@@ -270,6 +272,14 @@ impl App {
                 self.input_mode = InputMode::Popup {
                     title: "Enter player position to record shoot".to_string(),
                     kind: PopupKind::Shoot,
+                };
+                self.input.clear();
+            }
+
+            KeyCode::Char('h') => {
+                self.input_mode = InputMode::Popup {
+                    title: "Key Bindings".to_string(),
+                    kind: PopupKind::Help,
                 };
                 self.input.clear();
             }
