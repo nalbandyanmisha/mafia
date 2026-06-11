@@ -9,7 +9,6 @@ pub use header::Header;
 use main::Actor;
 pub use main::Main;
 
-use crate::app::input::InputMode;
 use crate::domain::{
     Activity, Day, EveningActivity, MorningActivity, NightActivity, NoonActivity, Position, Role,
     Status,
@@ -24,8 +23,6 @@ pub struct HostView {
     pub header: Header, // activity name + phase info (nominees/checks)
     pub body: Main,     // active actor / instructions + timer + results
     pub footer: Footer, // list of host commands
-    pub input: String,
-    pub input_mode: InputMode,
 }
 
 impl HostView {
@@ -64,8 +61,6 @@ impl HostView {
             header: Header::new(in_p_c, out_p_c, host_text.title),
             body,
             footer: Footer::new(&host_text.info.expect("info should exist")),
-            input: app.input.clone(),
-            input_mode: app.input_mode.clone(),
         }
     }
 }

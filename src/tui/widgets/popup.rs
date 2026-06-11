@@ -1,33 +1,21 @@
 use ratatui::{
     Frame,
-    style::{Color, Style},
-    text::Line,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    layout::Rect,
+    style::Color,
+    widgets::{Block, BorderType, Borders, Clear, Widget},
 };
 
-use crate::{tui::layout, tui::view::events::EventsView};
+pub fn draw(frame: &mut Frame, area: Rect, title: &str, content: impl Widget) {
+    frame.render_widget(Clear, area);
 
-pub fn draw(frame: &mut Frame, layout: &layout::Events, view: &EventsView) {
-    frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" EVENTS ")
-            .style(Style::default().fg(Color::Magenta)),
-        layout.area,
-    );
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Color::White)
+        .border_type(BorderType::Thick);
 
-    let lines: Vec<Line> = if view.messages.is_empty() {
-        vec![Line::from("No events yet")]
-    } else {
-        view.messages
-            .iter()
-            .map(|m| Line::from(m.to_string().clone()))
-            .collect()
-    };
-
-    frame.render_widget(
-        Paragraph::new(lines).wrap(Wrap { trim: true }),
-        layout.content,
-    );
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(content, inner);
 }
 

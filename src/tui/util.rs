@@ -1,3 +1,3 @@
 pub mod layout;
 
-pub use layout::centered_area;
+pub use layout::center;

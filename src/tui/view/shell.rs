@@ -1,9 +1,11 @@
 use super::{CommandView, EventsView, MainView};
-use crate::{app::input::{InputMode, PopupKind}, snapshot};
+use crate::{app::input::PopupKind, snapshot};
 
 #[derive(Debug, Clone)]
-pub enum Overlay {
-    Help { title: String },
+pub struct Popup {
+    pub kind: PopupKind,
+    pub title: String,
+    pub input: String,
 }
 
 #[derive(Debug, Clone)]
@@ -11,24 +13,26 @@ pub struct Shell {
     pub main: MainView,
     pub command: CommandView,
     pub events: EventsView,
-    pub overlay: Option<Overlay>,
+    pub popup: Option<Popup>,
 }
 
 impl Shell {
     /// Compute the views from the snapshot
     pub fn new(app: &snapshot::App) -> Self {
-        let overlay = match &app.input_mode {
-            InputMode::Popup { kind: PopupKind::Help, title } => Some(Overlay::Help {
-                title: title.clone(),
+        let popup = match &app.popup {
+            Some(p) => Some(Popup {
+                kind: p.kind.clone(),
+                title: p.title.clone(),
+                input: app.input.clone(),
             }),
-            _ => None,
+            None => None,
         };
 
         Self {
             main: MainView::from_snapshot(app),
             command: CommandView::from_snapshot(app),
             events: EventsView::from_snapshot(app),
-            overlay,
+            popup,
         }
     }
 }
