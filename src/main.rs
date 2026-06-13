@@ -1,6 +1,7 @@
 mod app;
 mod domain;
 mod engine;
+mod rank;
 mod snapshot;
 mod storage;
 mod tui;
