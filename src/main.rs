@@ -4,6 +4,8 @@ mod engine;
 mod snapshot;
 mod storage;
 mod tui;
+mod reducer;
+mod action;
 
 use app::{App, AppStatus, events::Event as AppEvent};
 use snapshot::Snapshot;
