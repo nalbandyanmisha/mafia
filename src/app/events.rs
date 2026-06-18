@@ -1,7 +1,7 @@
 use ratatui::crossterm::event::KeyEvent;
 use std::fmt;
 
-use crate::engine::Event as EngineEvent;
+use crate::engine::EngineEvent as EngineEvent;
 
 #[derive(Debug, Clone)]
 pub enum Event {

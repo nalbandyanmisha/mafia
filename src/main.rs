@@ -6,6 +6,7 @@ mod storage;
 mod tui;
 mod reducer;
 mod action;
+mod effect;
 
 use app::{App, AppStatus, events::Event as AppEvent};
 use snapshot::Snapshot;

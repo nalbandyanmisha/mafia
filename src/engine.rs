@@ -46,7 +46,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub enum Event {
+pub enum EngineEvent {
     // lifecycle
     GameStarted,
     GameEnded,
@@ -59,22 +59,22 @@ pub enum Event {
     Game(game::Event),
 }
 
-impl fmt::Display for Event {
+impl fmt::Display for EngineEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Event::GameStarted => {
+            EngineEvent::GameStarted => {
                 write!(f, "Game has started")
             }
-            Event::GameEnded => {
+            EngineEvent::GameEnded => {
                 write!(f, "Game has ended")
             }
-            Event::PhaseAdvanced { from, to } => {
+            EngineEvent::PhaseAdvanced { from, to } => {
                 write!(f, "Game phase advanced from  {from} to {to}")
             }
-            Event::ActorAdvanced { to } => {
+            EngineEvent::ActorAdvanced { to } => {
                 write!(f, "Actor advanced to {to}")
             }
-            Event::Game(event) => write!(f, "{event}"),
+            EngineEvent::Game(event) => write!(f, "{event}"),
         }
     }
 }
@@ -108,7 +108,7 @@ impl Engine {
         }
     }
 
-    pub fn apply(&mut self, cmd: Command) -> Result<Vec<Event>> {
+    pub fn apply(&mut self, cmd: Command) -> Result<Vec<EngineEvent>> {
         match cmd {
             Command::Join { name } => self.join(&name),
             Command::Leave { name } => self.leave(&name),
@@ -129,7 +129,7 @@ impl Engine {
     // ------------------------------
     // Join / Leave
     // ------------------------------
-    fn join(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
+    fn join(&mut self, name: &str) -> Result<Vec<EngineEvent>, anyhow::Error> {
         self.ensure_lobby_waiting()?;
 
         let mut events = Vec::new();
@@ -142,10 +142,10 @@ impl Engine {
             self.state = EngineState::Lobby(LobbyStatus::Ready);
         }
 
-        Ok(events.into_iter().map(Event::Game).collect())
+        Ok(events.into_iter().map(EngineEvent::Game).collect())
     }
 
-    fn leave(&mut self, name: &str) -> Result<Vec<Event>> {
+    fn leave(&mut self, name: &str) -> Result<Vec<EngineEvent>> {
         self.ensure_lobby()?;
         let mut events = Vec::new();
         events.extend(self.revoke_position(name)?);
@@ -160,12 +160,12 @@ impl Engine {
             self.state = EngineState::Lobby(LobbyStatus::Waiting);
         }
 
-        Ok(vec![Event::Game(game::Event::PlayerLeft {
+        Ok(vec![EngineEvent::Game(game::Event::PlayerLeft {
             name: name.to_string(),
         })])
     }
 
-    fn assign_position(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
+    fn assign_position(&mut self, name: &str) -> Result<Vec<EngineEvent>, anyhow::Error> {
         self.ensure_lobby_waiting()?;
 
         // Pick random seat
@@ -185,11 +185,11 @@ impl Engine {
         Ok(events
             .into_iter()
             .map(game::Event::Player)
-            .map(Event::Game)
+            .map(EngineEvent::Game)
             .collect())
     }
 
-    fn revoke_position(&mut self, name: &str) -> Result<Vec<Event>, anyhow::Error> {
+    fn revoke_position(&mut self, name: &str) -> Result<Vec<EngineEvent>, anyhow::Error> {
         self.ensure_lobby()?;
 
         let position = self
@@ -208,11 +208,11 @@ impl Engine {
         Ok(events
             .into_iter()
             .map(game::Event::Player)
-            .map(Event::Game)
+            .map(EngineEvent::Game)
             .collect())
     }
 
-    fn start(&mut self) -> Result<Vec<Event>> {
+    fn start(&mut self) -> Result<Vec<EngineEvent>> {
         self.ensure_lobby_ready()?;
 
         self.game
@@ -221,10 +221,10 @@ impl Engine {
         self.state = EngineState::Game(Activity::Night(NightActivity::RoleAssignment));
         self.actor.reset(Position::new(1));
 
-        Ok(vec![Event::GameStarted])
+        Ok(vec![EngineEvent::GameStarted])
     }
 
-    fn end(&mut self) -> Result<Vec<Event>> {
+    fn end(&mut self) -> Result<Vec<EngineEvent>> {
         let mut events = Vec::new();
         let mafia = self.game.players().iter().fold(0, |count, p| {
             if p.is_mafia() && p.is_alive() {
@@ -242,14 +242,14 @@ impl Engine {
         });
 
         if mafia == 0 || mafia >= citizens {
-            events.push(Event::GameEnded);
+            events.push(EngineEvent::GameEnded);
         } else {
             return Ok(events);
         }
         Ok(events)
     }
 
-    fn assign_role(&mut self, position: Position) -> Result<Vec<Event>> {
+    fn assign_role(&mut self, position: Position) -> Result<Vec<EngineEvent>> {
         self.ensure_role_assignment()?;
 
         if self
@@ -274,7 +274,7 @@ impl Engine {
         Ok(vec![])
     }
 
-    fn revoke_role(&mut self, position: Position) -> Result<Vec<Event>> {
+    fn revoke_role(&mut self, position: Position) -> Result<Vec<EngineEvent>> {
         self.ensure_role_assignment()?;
 
         let player = self.game.player_by_position(position).unwrap();
@@ -289,7 +289,7 @@ impl Engine {
     // Player actions
     // ------------------------------
 
-    fn warn(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
+    fn warn(&mut self, target: Position) -> Result<Vec<EngineEvent>, anyhow::Error> {
         let mut events = Vec::new();
         self.ensure_alive(target)?;
         events.extend(self.end()?);
@@ -301,8 +301,8 @@ impl Engine {
                 .warn()?
                 .into_iter()
                 .map(game::Event::Player)
-                .map(Event::Game)
-                .collect::<Vec<Event>>(),
+                .map(EngineEvent::Game)
+                .collect::<Vec<EngineEvent>>(),
         ); // returns Vec<player::Event>
 
         if self.game.player_by_position(target).unwrap().is_removed() {
@@ -321,18 +321,18 @@ impl Engine {
         Ok(events)
     }
 
-    fn pardon(&mut self, target: Position) -> Result<Vec<Event>> {
+    fn pardon(&mut self, target: Position) -> Result<Vec<EngineEvent>> {
         self.ensure_alive(target)?;
         let player = self.game.player_by_position_mut(target).unwrap();
         let events = player.pardon()?;
         Ok(events
             .into_iter()
             .map(game::Event::Player)
-            .map(Event::Game)
+            .map(EngineEvent::Game)
             .collect())
     }
 
-    fn shoot(&mut self, target: Position) -> Result<Vec<Event>, anyhow::Error> {
+    fn shoot(&mut self, target: Position) -> Result<Vec<EngineEvent>, anyhow::Error> {
         let mut events = Vec::new();
         self.ensure_alive(target)?;
         if let Some(actor) = self.actor.current() {
@@ -340,7 +340,7 @@ impl Engine {
                 self.game
                     .record_shoot(self.day, actor, target)?
                     .into_iter()
-                    .map(Event::Game),
+                    .map(EngineEvent::Game),
             );
         } else {
             return Err(anyhow::anyhow!("No active shooter"));
@@ -349,7 +349,7 @@ impl Engine {
         Ok(events)
     }
 
-    fn check(&mut self, target: Position) -> Result<Vec<Event>> {
+    fn check(&mut self, target: Position) -> Result<Vec<EngineEvent>> {
         match self.phase()? {
             Activity::Night(NightActivity::SheriffCheck) => {
                 self.game.record_sheriff_check(self.day, target)?;
@@ -363,14 +363,14 @@ impl Engine {
         Ok(vec![])
     }
 
-    fn guess(&mut self, geusses: &[Position]) -> Result<Vec<Event>> {
+    fn guess(&mut self, geusses: &[Position]) -> Result<Vec<EngineEvent>> {
         for guess in geusses {
             self.game.record_guess(*guess)?;
         }
         Ok(vec![])
     }
 
-    fn nominate(&mut self, target: Position) -> Result<Vec<Event>> {
+    fn nominate(&mut self, target: Position) -> Result<Vec<EngineEvent>> {
         self.ensure_discussion()?;
         let by = self
             .actor
@@ -380,10 +380,10 @@ impl Engine {
         self.ensure_alive(target)?;
 
         let events = self.game.add_nomination(self.day, by, target)?;
-        Ok(events.into_iter().map(Event::Game).collect())
+        Ok(events.into_iter().map(EngineEvent::Game).collect())
     }
 
-    fn vote(&mut self, voters: Vec<Position>) -> Result<Vec<Event>> {
+    fn vote(&mut self, voters: Vec<Position>) -> Result<Vec<EngineEvent>> {
         let phase = self.phase()?;
 
         match phase {
@@ -425,7 +425,7 @@ impl Engine {
         Ok(vec![])
     }
 
-    fn advance(&mut self) -> Result<Vec<Event>> {
+    fn advance(&mut self) -> Result<Vec<EngineEvent>> {
         use Activity::*;
         use EveningActivity::*;
         use MorningActivity::*;
@@ -457,7 +457,7 @@ impl Engine {
                     );
 
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
@@ -478,7 +478,7 @@ impl Engine {
                         self.assign_role(position)?;
                     }
 
-                    vec![Event::ActorAdvanced { to: position }]
+                    vec![EngineEvent::ActorAdvanced { to: position }]
                 }
             }
             Night(SheriffReveal) => {
@@ -498,12 +498,12 @@ impl Engine {
                             .expect("Don must have assigned position"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -533,12 +533,12 @@ impl Engine {
                     // will fix this to avoid missunderstanding
                     self.actor.reset(don);
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -559,12 +559,12 @@ impl Engine {
                     self.actor.reset(first_speaker_of_discussion);
                     self.last_discussion_started = first_speaker_of_discussion;
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -608,15 +608,15 @@ impl Engine {
                                 .mark_dead()?
                                 .into_iter()
                                 .map(game::Event::Player)
-                                .map(Event::Game)
-                                .collect::<Vec<Event>>(),
+                                .map(EngineEvent::Game)
+                                .collect::<Vec<EngineEvent>>(),
                         );
                         events.extend(
                             self.game
                                 .record_mafia_kill(self.day, target)?
                                 .into_iter()
-                                .map(Event::Game)
-                                .collect::<Vec<Event>>(),
+                                .map(EngineEvent::Game)
+                                .collect::<Vec<EngineEvent>>(),
                         );
                         events.extend(self.end()?);
                     }
@@ -628,13 +628,13 @@ impl Engine {
                             .expect("Sheriff must have assigned position"),
                     );
                     self.set_phase(next)?;
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
                     events
                 } else {
-                    events.push(Event::ActorAdvanced {
+                    events.push(EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -660,12 +660,12 @@ impl Engine {
                             .expect("Don must have assigned position"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -687,7 +687,7 @@ impl Engine {
                         let first_speaker_of_discussion = self.compute_first_speaker_of_day();
                         self.actor.reset(first_speaker_of_discussion);
                         self.last_discussion_started = first_speaker_of_discussion;
-                        vec![Event::PhaseAdvanced {
+                        vec![EngineEvent::PhaseAdvanced {
                             from: current,
                             to: next,
                         }]
@@ -699,13 +699,13 @@ impl Engine {
                                 .expect("Killed player must exist"),
                         );
                         self.set_phase(next)?;
-                        vec![Event::PhaseAdvanced {
+                        vec![EngineEvent::PhaseAdvanced {
                             from: current,
                             to: next,
                         }]
                     }
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -735,12 +735,12 @@ impl Engine {
                             .expect("Killed player must exist"),
                     );
                     self.set_phase(next)?;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -766,12 +766,12 @@ impl Engine {
                     let first_speaker_of_discussion = self.compute_first_speaker_of_day();
                     self.actor.reset(first_speaker_of_discussion);
                     self.last_discussion_started = first_speaker_of_discussion;
-                    vec![Event::PhaseAdvanced {
+                    vec![EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     }]
                 } else {
-                    vec![Event::ActorAdvanced {
+                    vec![EngineEvent::ActorAdvanced {
                         to: self
                             .actor
                             .current()
@@ -804,7 +804,7 @@ impl Engine {
                 });
 
                 if let Some(pos) = self.actor.current() {
-                    events.push(Event::ActorAdvanced { to: pos });
+                    events.push(EngineEvent::ActorAdvanced { to: pos });
                 }
 
                 if self.actor.is_completed() {
@@ -831,7 +831,7 @@ impl Engine {
                         self.actor.reset(nominees[0]);
                     }
                     self.set_phase(next)?;
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
@@ -866,7 +866,7 @@ impl Engine {
                         .get_mut(&self.day)
                         .expect("Voting must exist")
                         .finalize_nominee(previous_actor);
-                    events.push(Event::Game(game::Event::Voting(
+                    events.push(EngineEvent::Game(game::Event::Voting(
                         game::voting::Event::Finalized {
                             nominee: previous_actor,
                         },
@@ -882,7 +882,7 @@ impl Engine {
                             .cast_implicit_votes_for_nominee()
                             .into_iter()
                             .for_each(|e| {
-                                events.push(Event::Game(game::Event::Voting(e)));
+                                events.push(EngineEvent::Game(game::Event::Voting(e)));
                             });
                     }
                 }
@@ -896,7 +896,7 @@ impl Engine {
                     .expect("Voting must exist");
                 voting.next_actor(&mut self.actor, |_| true);
                 if let Some(pos) = self.actor.current() {
-                    events.push(Event::ActorAdvanced { to: pos });
+                    events.push(EngineEvent::ActorAdvanced { to: pos });
                 }
 
                 if self.actor.is_completed() {
@@ -931,7 +931,7 @@ impl Engine {
                         self.actor.reset(tie_nominees[0]);
                         self.set_phase(self.next(current))?;
                     }
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
@@ -951,13 +951,13 @@ impl Engine {
                 voting.next_actor(&mut self.actor, |_| true);
 
                 if let Some(pos) = self.actor.current() {
-                    events.push(Event::ActorAdvanced { to: pos });
+                    events.push(EngineEvent::ActorAdvanced { to: pos });
                 }
 
                 if self.actor.is_completed() {
                     self.actor.reset(voting.get_nominees()[0]);
                     self.set_phase(next)?;
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
@@ -984,7 +984,7 @@ impl Engine {
                         .get_mut(&self.day)
                         .expect("Voting must exist")
                         .finalize_nominee(previous_actor);
-                    events.push(Event::Game(game::Event::Voting(
+                    events.push(EngineEvent::Game(game::Event::Voting(
                         game::voting::Event::Finalized {
                             nominee: previous_actor,
                         },
@@ -1000,7 +1000,7 @@ impl Engine {
                             .cast_implicit_votes_for_nominee()
                             .into_iter()
                             .for_each(|e| {
-                                events.push(Event::Game(game::Event::Voting(e)));
+                                events.push(EngineEvent::Game(game::Event::Voting(e)));
                             });
                     }
                 }
@@ -1015,7 +1015,7 @@ impl Engine {
                 voting.next_actor(&mut self.actor, |_| true);
 
                 if let Some(pos) = self.actor.current() {
-                    events.push(Event::ActorAdvanced { to: pos });
+                    events.push(EngineEvent::ActorAdvanced { to: pos });
                 }
 
                 if self.actor.is_completed() {
@@ -1034,7 +1034,7 @@ impl Engine {
                         self.set_phase(next)?;
                     }
 
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
@@ -1085,7 +1085,7 @@ impl Engine {
                 }
 
                 self.set_phase(next)?;
-                events.push(Event::PhaseAdvanced {
+                events.push(EngineEvent::PhaseAdvanced {
                     from: current,
                     to: next,
                 });
@@ -1104,7 +1104,7 @@ impl Engine {
                         .unwrap_or(false)
                 });
                 if let Some(pos) = self.actor.current() {
-                    events.push(Event::ActorAdvanced { to: pos });
+                    events.push(EngineEvent::ActorAdvanced { to: pos });
                 }
 
                 if self.actor.is_completed() {
@@ -1119,7 +1119,7 @@ impl Engine {
                             .position()
                             .expect("Must have assigned position"),
                     );
-                    events.push(Event::PhaseAdvanced {
+                    events.push(EngineEvent::PhaseAdvanced {
                         from: current,
                         to: next,
                     });
