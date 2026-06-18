@@ -518,7 +518,7 @@ impl App {
         self.timer_task = Some(handle);
     }
 
-    async fn handle_engine_result(&mut self, result: anyhow::Result<Vec<crate::engine::Event>>) {
+    async fn handle_engine_result(&mut self, result: anyhow::Result<Vec<crate::engine::EngineEvent>>) {
         match result {
             Ok(events) => {
                 for event in events {
@@ -526,13 +526,13 @@ impl App {
                     let _ = self.event_tx.send(AppEvent::Engine(event.clone())).await;
 
                     // AUTO TIMER HOOK
-                    if let crate::engine::Event::ActorAdvanced { .. } = event {
+                    if let crate::engine::EngineEvent::ActorAdvanced { .. } = event {
                         if let Some(seconds) = timer_for_engine(&self.engine) {
                             self.start_timer(seconds).await;
                         }
                     }
 
-                    if let crate::engine::Event::GameEnded = event {
+                    if let crate::engine::EngineEvent::GameEnded = event {
                         // stop any running timer
                         if let Some(task) = self.timer_task.take() {
                             task.abort();
